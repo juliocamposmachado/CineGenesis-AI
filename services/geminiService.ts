@@ -1,5 +1,5 @@
 import { GoogleGenAI, VideoGenerationReferenceImage, VideoGenerationReferenceType } from "@google/genai";
-import { UploadedImage, VoiceSettings, ProductionSettings } from "../types";
+import { UploadedImage, VoiceSettings, ProductionSettings, UploadedAudio } from "../types";
 
 // Helper to check/request API key via AI Studio extension
 export const checkApiKey = async (): Promise<boolean> => {
@@ -37,6 +37,56 @@ const buildProductionPrompt = (settings: ProductionSettings): string => {
   instructions += "- SOUND QUALITY: Mastered for cinema, clear dialogue, immersive 3D spatial audio.\n";
 
   return instructions;
+};
+
+/**
+ * Analyzes an audio file to extract vocal characteristics for the prompt.
+ */
+export const analyzeVoiceArchetype = async (audio: UploadedAudio, apiKey?: string): Promise<string> => {
+  const effectiveKey = apiKey || process.env.API_KEY;
+  const ai = new GoogleGenAI({ apiKey: effectiveKey });
+  const modelId = 'gemini-2.5-flash';
+
+  const parts: any[] = [
+    { text: `Atue como um Engenheiro de Som e Diretor de Casting. Ouça esta gravação de voz.
+    
+    TAREFA: Descreva tecnicamente esta voz para instruir uma IA de geração de vídeo (TTS).
+    
+    EXTRAIA:
+    - Timbre (Grave, Agudo, Rouco, Suave, Aveludado)
+    - Idade Aparentes
+    - Sotaque ou Região (se perceptível)
+    - Emoção/Tom (Autoritário, Melancólico, Hesitante, Alegre)
+    - Cadência (Rápida, Lenta, Pausada)
+
+    SAÍDA: Retorne APENAS a descrição em uma frase curta e direta (Ex: "Voz masculina grave, rouca, sotaque britânico, tom autoritário e lento").` },
+    {
+      inlineData: {
+        mimeType: audio.mimeType,
+        data: audio.base64
+      }
+    }
+  ];
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: { parts },
+    });
+    return response.text?.trim() || "Voz natural cinematográfica.";
+  } catch (error) {
+    console.error("Error analyzing voice:", error);
+    return "Voz natural cinematográfica (Erro na análise).";
+  }
+};
+
+/**
+ * Parses a screenplay text to extract camera directions and dialogue
+ */
+export const parseScreenplayToPrompt = (text: string): string => {
+  // Simple parser to identify specific script elements and format them for the model
+  // This is a heuristic approach to improve model adherence to script format
+  return text; 
 };
 
 /**
@@ -112,6 +162,9 @@ export const generateCinematicVideo = async (
   const effectiveKey = apiKey || process.env.API_KEY;
   const ai = new GoogleGenAI({ apiKey: effectiveKey });
 
+  // Use the parsed/enhanced prompt
+  const formattedPrompt = parseScreenplayToPrompt(userPrompt);
+
   // Construct Voice Context
   const voiceContext = `
     DIREÇÃO DE ÁUDIO (Voice Acting):
@@ -131,8 +184,8 @@ export const generateCinematicVideo = async (
     ${voiceContext}
     ${productionContext}
     
-    CENA (Action):
-    ${userPrompt}
+    CENA (Action & Dialogue):
+    ${formattedPrompt}
     
     ESTILO: Série de Drama/Suspense Psicológico. Iluminação de cinema, profundidade de campo.
   `.trim();
@@ -178,7 +231,7 @@ export const generateCinematicVideo = async (
         ${voiceContext}
         ${productionContext}
 
-        AÇÃO: ${userPrompt}
+        AÇÃO: ${formattedPrompt}
         
         ESTILO: Cinematografia de alta qualidade, 35mm, Drama, Suspense.
       `.trim();

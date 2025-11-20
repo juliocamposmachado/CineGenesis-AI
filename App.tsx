@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera, ArrowRightCircle } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
+import AudioUploader from './components/AudioUploader'; // NEW
 import SafetyModal from './components/SafetyModal';
-import { UploadedImage, AppStatus, VoiceSettings, LibraryItem, ProductionSettings } from './types';
-import { checkApiKey, analyzeArchetypes, generateCinematicVideo, extendCinematicVideo } from './services/geminiService';
+import { UploadedImage, UploadedAudio, AppStatus, VoiceSettings, LibraryItem, ProductionSettings } from './types';
+import { checkApiKey, analyzeArchetypes, analyzeVoiceArchetype, generateCinematicVideo, extendCinematicVideo } from './services/geminiService';
 
 // --- IndexedDB Helpers for Video Storage ---
 const DB_NAME = 'CineGenesisDB';
@@ -65,7 +66,12 @@ const App: React.FC = () => {
   
   // Generation State
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
+  
+  // Visual Assets
   const [images, setImages] = useState<{ A: UploadedImage | null; B: UploadedImage | null }>({ A: null, B: null });
+  // Audio Assets (NEW)
+  const [audios, setAudios] = useState<{ A: UploadedAudio | null; B: UploadedAudio | null }>({ A: null, B: null });
+  
   const [prompt, setPrompt] = useState('');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [currentBlob, setCurrentBlob] = useState<Blob | null>(null);
@@ -165,6 +171,33 @@ const App: React.FC = () => {
         label: key === 'A' ? 'Protagonista (Ref)' : 'Antagonista (Ref)'
       };
       setImages(prev => ({ ...prev, [key]: newImage }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAudioUpload = async (file: File, key: string) => {
+    setStatus(AppStatus.ANALYZING_AUDIO);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = (reader.result as string).split(',')[1];
+      const newAudio: UploadedAudio = {
+        file,
+        previewUrl: URL.createObjectURL(file),
+        base64,
+        mimeType: file.type,
+        label: key === 'A' ? 'Voz Protagonista' : 'Voz Antagonista'
+      };
+      setAudios(prev => ({ ...prev, [key]: newAudio }));
+
+      // Automatically analyze the voice upon upload to fill the text setting
+      try {
+        const description = await analyzeVoiceArchetype(newAudio, userApiKey);
+        handleVoiceChange(key === 'A' ? 'characterA' : 'characterB', description);
+      } catch (e) {
+        console.error("Failed to auto-analyze audio", e);
+      } finally {
+        setStatus(AppStatus.IDLE);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -333,6 +366,11 @@ const App: React.FC = () => {
     }
   };
 
+  const loadPilotScript = () => {
+    const script = `CENA 1 - INT. CORREDOR - NOITE\n\nA câmera inicia com um leve CLOSE-UP nos olhos da MULHER (Juliette) enquanto ela respira fundo, carregando dúvida e intensidade.\n\nMULHER: "Às vezes sinto que o meu próprio silêncio pesa mais do que as palavras que não digo."\n\nHOMEM (Guia): "O silêncio só pesa quando tentamos ignorar o que ele tenta revelar."\n\nA câmera faz um TRAVELLING lateral lento, ampliando a profundidade emocional.\n\nMULHER: "E se eu não estiver pronta para ouvir?"\n\nHOMEM: "Ninguém está. A prontidão nasce quando damos o primeiro passo."\n\nOs dois personagens dão alguns passos no corredor iluminado por luz difusa.`;
+    setPrompt(script);
+  };
+
   // Social Links
   const SocialLinks = () => (
     <div className="flex gap-4 items-center justify-center flex-wrap">
@@ -389,7 +427,7 @@ const App: React.FC = () => {
     );
   }
 
-  const isProcessing = status === AppStatus.ANALYZING || status === AppStatus.GENERATING || status === AppStatus.EXTENDING;
+  const isProcessing = status === AppStatus.ANALYZING || status === AppStatus.GENERATING || status === AppStatus.EXTENDING || status === AppStatus.ANALYZING_AUDIO;
 
   return (
     <div className="min-h-screen bg-black text-zinc-200 selection:bg-amber-500/30 flex flex-col">
@@ -555,15 +593,36 @@ const App: React.FC = () => {
                 </a>
               </section>
 
-              {/* Images */}
+              {/* Images & Audio References */}
               <section className={isExtensionMode ? "opacity-50 pointer-events-none grayscale" : ""}>
                 <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
                   <span className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-400">1</span>
-                  Elenco (Visual)
+                  Elenco & Voz (Referências)
                 </h2>
-                <div className="grid grid-cols-2 gap-4">
-                  <ImageUploader label="Protagonista" image={images.A} onUpload={(f) => handleImageUpload(f, 'A')} onRemove={() => setImages(p => ({ ...p, A: null }))} />
-                  <ImageUploader label="Antagonista" image={images.B} onUpload={(f) => handleImageUpload(f, 'B')} onRemove={() => setImages(p => ({ ...p, B: null }))} />
+                <div className="grid grid-cols-2 gap-6">
+                  {/* Protagonist Column */}
+                  <div className="flex flex-col gap-3">
+                    <ImageUploader label="Protagonista" image={images.A} onUpload={(f) => handleImageUpload(f, 'A')} onRemove={() => setImages(p => ({ ...p, A: null }))} />
+                    <AudioUploader 
+                      label="Voz Protagonista (Ref)" 
+                      audio={audios.A} 
+                      onUpload={(f) => handleAudioUpload(f, 'A')} 
+                      onRemove={() => setAudios(p => ({ ...p, A: null }))}
+                      isAnalyzing={status === AppStatus.ANALYZING_AUDIO}
+                    />
+                  </div>
+
+                  {/* Antagonist Column */}
+                  <div className="flex flex-col gap-3">
+                    <ImageUploader label="Antagonista" image={images.B} onUpload={(f) => handleImageUpload(f, 'B')} onRemove={() => setImages(p => ({ ...p, B: null }))} />
+                    <AudioUploader 
+                      label="Voz Antagonista (Ref)" 
+                      audio={audios.B} 
+                      onUpload={(f) => handleAudioUpload(f, 'B')} 
+                      onRemove={() => setAudios(p => ({ ...p, B: null }))}
+                      isAnalyzing={status === AppStatus.ANALYZING_AUDIO}
+                    />
+                  </div>
                 </div>
               </section>
 
@@ -571,11 +630,14 @@ const App: React.FC = () => {
               <section>
                 <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
                   <span className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-400">2</span>
-                  Consistência Vocal
+                  Consistência Vocal (Texto)
                 </h2>
+                <p className="text-[10px] text-zinc-500 mb-2">
+                  *Se enviar áudio acima, estes campos serão preenchidos automaticamente pela IA.
+                </p>
                 <div className="space-y-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800">
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-500 flex items-center gap-1"><Mic2 size={10} /> Voz Protagonista</label>
+                    <label className="text-xs text-zinc-500 flex items-center gap-1"><Mic2 size={10} /> Descrição Voz Protagonista</label>
                     <input 
                       type="text" 
                       className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white placeholder-zinc-600 focus:border-amber-500 focus:outline-none"
@@ -585,7 +647,7 @@ const App: React.FC = () => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-500 flex items-center gap-1"><Mic2 size={10} /> Voz Antagonista</label>
+                    <label className="text-xs text-zinc-500 flex items-center gap-1"><Mic2 size={10} /> Descrição Voz Antagonista</label>
                     <input 
                       type="text" 
                       className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white placeholder-zinc-600 focus:border-amber-500 focus:outline-none"
@@ -674,16 +736,23 @@ const App: React.FC = () => {
                     </span>
                     {isExtensionMode ? 'Continuação da Cena' : 'Roteiro da Cena'}
                   </div>
-                  {isExtensionMode && (
-                    <button onClick={handleCancelExtension} className="text-xs text-red-500 hover:underline">Cancelar Extensão</button>
-                  )}
+                  <div>
+                    {!isExtensionMode && (
+                      <button onClick={loadPilotScript} className="text-xs text-amber-500 hover:underline mr-3">
+                        Carregar Roteiro Piloto
+                      </button>
+                    )}
+                    {isExtensionMode && (
+                      <button onClick={handleCancelExtension} className="text-xs text-red-500 hover:underline">Cancelar Extensão</button>
+                    )}
+                  </div>
                 </h2>
                 
                 <textarea
                   className={`w-full h-32 bg-zinc-900/50 border rounded-xl p-4 text-sm text-white placeholder-zinc-600 focus:outline-none resize-none
                     ${isExtensionMode ? 'border-amber-600/50 focus:ring-1 focus:ring-amber-500' : 'border-zinc-700 focus:ring-1 focus:ring-amber-500/50'}
                   `}
-                  placeholder={isExtensionMode ? "Ação seguinte (mantendo voz e visual)..." : "Descreva a ação..."}
+                  placeholder={isExtensionMode ? "Ação seguinte (mantendo voz e visual)..." : "Descreva a ação e diálogos..."}
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                 />
@@ -702,7 +771,7 @@ const App: React.FC = () => {
                 `}
               >
                 {isProcessing ? <Loader2 className="animate-spin" /> : isExtensionMode ? <PlusCircle size={16} /> : <Play size={16} />}
-                {isProcessing ? (status === AppStatus.EXTENDING ? 'Estendendo...' : 'Produzindo...') : isExtensionMode ? 'Gerar Continuação' : 'Gerar Cena'}
+                {isProcessing ? (status === AppStatus.EXTENDING ? 'Estendendo...' : status === AppStatus.ANALYZING_AUDIO ? 'Analisando Voz...' : 'Produzindo...') : isExtensionMode ? 'Gerar Continuação' : 'Gerar Cena'}
               </button>
 
               {status === AppStatus.ERROR && (

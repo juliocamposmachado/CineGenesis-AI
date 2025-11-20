@@ -6,9 +6,18 @@ export interface UploadedImage {
   label: string; // e.g., "Personagem A"
 }
 
+export interface UploadedAudio {
+  file: File;
+  previewUrl: string;
+  base64: string;
+  mimeType: string;
+  label: string;
+}
+
 export enum AppStatus {
   IDLE = 'IDLE',
   ANALYZING = 'ANALYZING', // Analyzing archetypes
+  ANALYZING_AUDIO = 'ANALYZING_AUDIO', // New status for voice analysis
   GENERATING = 'GENERATING', // Generating video
   EXTENDING = 'EXTENDING', // Extending video
   COMPLETED = 'COMPLETED',
