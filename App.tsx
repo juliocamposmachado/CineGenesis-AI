@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera, ArrowRightCircle, Scissors, Layers, Share2, Video } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera, ArrowRightCircle, Scissors, Layers, Share2, Video, Coffee } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import AudioUploader from './components/AudioUploader';
 import VideoEditor from './components/VideoEditor';
@@ -87,6 +87,8 @@ const App: React.FC = () => {
   
   // Editor State (LIFTED UP)
   const [editorClips, setEditorClips] = useState<TimelineClip[]>([]);
+  const [isEditorLoading, setIsEditorLoading] = useState(false); // Animation State
+  const [loadingProgress, setLoadingProgress] = useState(0); // 0-100
 
   // Voice Consistency State
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
@@ -327,6 +329,28 @@ const App: React.FC = () => {
 
   // --- EDITOR INTEGRATION ---
   const handleEditFromLibrary = (item: LibraryItem) => {
+    // Trigger Loading Animation
+    setIsEditorLoading(true);
+    setLoadingProgress(0);
+
+    const interval = setInterval(() => {
+       setLoadingProgress(prev => {
+          const next = prev + 5;
+          if (next >= 100) {
+             clearInterval(interval);
+             // Finish Loading
+             setTimeout(() => {
+                finalizeImportToEditor(item);
+                setIsEditorLoading(false);
+             }, 300);
+             return 100;
+          }
+          return next;
+       });
+    }, 50); // ~1.5s animation
+  };
+
+  const finalizeImportToEditor = (item: LibraryItem) => {
     // Create new clip
     const newClip: TimelineClip = {
       id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
@@ -477,7 +501,28 @@ const App: React.FC = () => {
 
   // 3. Render MAIN APP
   return (
-    <div className="min-h-screen bg-black text-zinc-200 selection:bg-amber-500/30 flex flex-col">
+    <div className="min-h-screen bg-black text-zinc-200 selection:bg-amber-500/30 flex flex-col relative">
+      
+      {/* --- LOADING CUP ANIMATION (OVERLAY) --- */}
+      {isEditorLoading && (
+        <div className="fixed inset-0 z-[90] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in duration-300">
+           <div className="relative w-24 h-36 bg-zinc-900/30 border-4 border-zinc-500 border-t-0 rounded-b-2xl overflow-hidden shadow-2xl shadow-amber-900/20">
+              {/* Liquid */}
+              <div 
+                 className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-amber-700 to-amber-500 transition-all duration-100 ease-linear"
+                 style={{ height: `${loadingProgress}%` }}
+              >
+                 {/* Bubbles / Foam */}
+                 <div className="absolute top-0 left-0 right-0 h-2 bg-amber-200/50 blur-sm animate-pulse"></div>
+              </div>
+              {/* Reflection */}
+              <div className="absolute top-0 right-2 w-2 h-full bg-white/5 rounded-full blur-sm"></div>
+           </div>
+           <h3 className="mt-6 font-cinema text-xl text-white animate-pulse">Carregando Rolo...</h3>
+           <p className="text-zinc-500 text-xs uppercase tracking-widest mt-2">{loadingProgress}% Processado</p>
+        </div>
+      )}
+
       {!disclaimerAccepted && <SafetyModal onAccept={() => setDisclaimerAccepted(true)} />}
 
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-40">
