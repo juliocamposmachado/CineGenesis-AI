@@ -18,6 +18,9 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
   const [exporting, setExporting] = useState(false);
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [previewClipMode, setPreviewClipMode] = useState(false);
+  
+  // Loading State
+  const [loadingResources, setLoadingResources] = useState<Set<string>>(new Set());
 
   // Refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -58,15 +61,36 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
       if (!mediaElementsRef.current.has(clip.id)) {
         let el: HTMLVideoElement | HTMLAudioElement | HTMLImageElement;
         
+        const handleCanPlay = () => {
+           setLoadingResources(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(clip.id);
+              return newSet;
+           });
+        };
+
+        const handleWaiting = () => {
+           setLoadingResources(prev => new Set(prev).add(clip.id));
+        };
+        
         if (clip.type === 'VIDEO') {
           el = document.createElement('video');
           el.src = clip.src;
           el.crossOrigin = "anonymous"; 
+          el.preload = "auto";
+          el.oncanplay = handleCanPlay;
+          el.onwaiting = handleWaiting;
+          // Force load
           (el as HTMLVideoElement).load();
+          // Initial loading state
+          setLoadingResources(prev => new Set(prev).add(clip.id));
         } else if (clip.type === 'AUDIO') {
           el = document.createElement('audio');
           el.src = clip.src;
           el.crossOrigin = "anonymous";
+          el.preload = "auto";
+          el.oncanplay = handleCanPlay;
+          el.onwaiting = handleWaiting;
         } else {
           el = new Image();
           el.src = clip.src;
@@ -77,9 +101,6 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
         // 2. Connect to Web Audio API (Video/Audio only)
         if (clip.type !== 'IMAGE' && (el instanceof HTMLVideoElement || el instanceof HTMLAudioElement)) {
            try {
-             // Check if we already made a source for this specific element instance to avoid errors
-             // Note: In React strict mode or re-renders, we rely on the map check above.
-             
              const source = ctx.createMediaElementSource(el);
              const gain = ctx.createGain();
              
@@ -90,7 +111,7 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
              sourceNodesRef.current.set(clip.id, source);
              gainNodesRef.current.set(clip.id, gain);
            } catch (e) {
-             console.warn("Audio Node creation skipped (already exists or error)", e);
+             console.warn("Audio Node creation skipped", e);
            }
         }
       }
@@ -106,14 +127,21 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
     const activeIds = new Set(clips.map(c => c.id));
     mediaElementsRef.current.forEach((el, id) => {
       if (!activeIds.has(id)) {
-         // Disconnect audio nodes if they exist
          const gain = gainNodesRef.current.get(id);
          if (gain) gain.disconnect();
-         // Note: Source nodes generally stay connected to element, but element is garbage collected
          
+         // Remove listeners to avoid leaks
+         el.oncanplay = null;
+         el.onwaiting = null;
+
          mediaElementsRef.current.delete(id);
          sourceNodesRef.current.delete(id);
          gainNodesRef.current.delete(id);
+         setLoadingResources(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(id);
+            return newSet;
+         });
       }
     });
 
@@ -124,6 +152,24 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
     }
 
   }, [clips]);
+
+  // Playback Pre-Sync Logic (Avoids audio drift)
+  useEffect(() => {
+      if (isPlaying) {
+          // Pre-sync all active media to current time before starting loop
+          clips.forEach(clip => {
+             const el = mediaElementsRef.current.get(clip.id);
+             if (!el) return;
+             const clipLocalTime = currentTime - clip.startOffset + clip.trimStart;
+             const isActive = currentTime >= clip.startOffset && currentTime < clip.startOffset + clip.duration;
+             
+             if (isActive && (el instanceof HTMLVideoElement || el instanceof HTMLAudioElement)) {
+                 el.currentTime = clipLocalTime;
+                 el.play().catch(e => console.log("Play interrupted", e));
+             }
+          });
+      }
+  }, [isPlaying]);
 
   // Render Loop
   const renderFrame = () => {
@@ -159,12 +205,18 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
 
       // Handle Video Drawing & Sync
       if (clip.type === 'VIDEO' && el instanceof HTMLVideoElement) {
-        // Sync Time
-        if (Number.isFinite(clipLocalTime) && Math.abs(el.currentTime - clipLocalTime) > 0.15) {
+        // Sync Time (Tight tolerance)
+        if (Number.isFinite(clipLocalTime) && Math.abs(el.currentTime - clipLocalTime) > 0.1) {
+           // Only seek if drift is significant to avoid audio glitches
            el.currentTime = clipLocalTime;
         }
-        // Play/Pause
-        if (isPlaying && el.paused) el.play().catch(() => {});
+        
+        if (isPlaying && el.paused && el.readyState >= 2) {
+             const playPromise = el.play();
+             if (playPromise !== undefined) {
+                playPromise.catch(() => {});
+             }
+        }
         if (!isPlaying && !el.paused) el.pause();
 
         // Draw
@@ -183,10 +235,13 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
 
       // Handle Audio Sync
       if (clip.type === 'AUDIO' && el instanceof HTMLAudioElement) {
-        if (Number.isFinite(clipLocalTime) && Math.abs(el.currentTime - clipLocalTime) > 0.15) {
+        if (Number.isFinite(clipLocalTime) && Math.abs(el.currentTime - clipLocalTime) > 0.1) {
            el.currentTime = clipLocalTime;
         }
-        if (isPlaying && el.paused) el.play().catch(() => {});
+        if (isPlaying && el.paused && el.readyState >= 2) {
+             const playPromise = el.play();
+             if (playPromise !== undefined) playPromise.catch(() => {});
+        }
         if (!isPlaying && !el.paused) el.pause();
       }
 
@@ -414,6 +469,14 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
           className="max-w-full max-h-[60vh] aspect-video shadow-2xl border border-zinc-900"
         />
         
+        {/* Loading Overlay */}
+        {loadingResources.size > 0 && (
+           <div className="absolute top-4 right-4 bg-black/80 backdrop-blur px-3 py-1.5 rounded-full border border-amber-500/30 flex items-center gap-2 z-40">
+               <div className="w-2 h-2 bg-amber-500 rounded-full animate-ping"></div>
+               <span className="text-[10px] text-amber-500 font-mono uppercase">Carregando Mídia...</span>
+           </div>
+        )}
+
         {exporting && (
            <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-50">
               <Wand2 className="text-amber-500 animate-pulse mb-4" size={48} />
@@ -423,36 +486,50 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
         )}
       </div>
 
-      {/* --- CONTROLS --- */}
-      <div className="h-16 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center px-4 justify-between">
-        <div className="flex items-center gap-4">
-           <button onClick={togglePlay} className={`p-3 rounded-full text-white transition-colors ${isPlaying ? 'bg-amber-600 hover:bg-amber-500' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
-             {isPlaying ? <Pause size={20} /> : <Play size={20} />}
-           </button>
-           <span className="font-mono text-amber-500 text-sm">
-             {currentTime.toFixed(2)}s / {totalDuration.toFixed(2)}s
-           </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-           <button onClick={() => setShowLibraryModal(true)} className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded flex items-center gap-2 text-xs font-bold border border-zinc-700">
-              <Library size={16} /> Biblioteca
+      {/* --- PREMIUM CONTROLS --- */}
+      <div className="h-20 bg-zinc-950 border-t border-zinc-800 flex items-center px-6 justify-between backdrop-blur-sm bg-opacity-90">
+        <div className="flex items-center gap-6">
+           {/* Play/Pause with Glow */}
+           <button onClick={togglePlay} className={`p-4 rounded-full text-white transition-all shadow-xl transform hover:scale-105 ${isPlaying ? 'bg-gradient-to-r from-amber-600 to-orange-600 shadow-amber-500/20' : 'bg-zinc-800 hover:bg-zinc-700 border border-zinc-700'}`}>
+             {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" className="ml-1" />}
            </button>
            
-           {/* Audio Upload */}
-           <label className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded cursor-pointer text-zinc-300 hover:text-amber-400 transition-colors border border-zinc-700 flex items-center gap-2 text-xs font-bold" title="Adicionar Áudio">
-              <Music size={16} /> Add Áudio
+           {/* Time Display */}
+           <div className="flex flex-col">
+              <span className="font-cinema text-2xl text-white font-bold tracking-widest">
+                {currentTime.toFixed(2)}<span className="text-zinc-600 text-base">s</span>
+              </span>
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Duração Total: {totalDuration.toFixed(2)}s</span>
+           </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+           {/* Library */}
+           <button onClick={() => setShowLibraryModal(true)} className="group px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-lg border border-zinc-800 hover:border-amber-500/30 text-zinc-400 hover:text-white transition-all flex items-center gap-2">
+              <Library size={18} className="group-hover:text-amber-500 transition-colors" />
+              <span className="text-xs font-bold uppercase tracking-wide">Biblioteca</span>
+           </button>
+           
+           {/* Add Audio */}
+           <label className="group px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-lg border border-zinc-800 hover:border-green-500/30 text-zinc-400 hover:text-white cursor-pointer transition-all flex items-center gap-2">
+              <Music size={18} className="group-hover:text-green-500 transition-colors" />
+              <span className="text-xs font-bold uppercase tracking-wide">Áudio</span>
               <input type="file" className="hidden" accept="audio/*" onChange={(e) => handleFileUpload(e, 'AUDIO')} />
            </label>
 
-           {/* General Upload */}
-           <label className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded cursor-pointer text-zinc-300 hover:text-white transition-colors border border-zinc-700 flex items-center gap-2 text-xs font-bold" title="Adicionar Arquivo">
-              <Plus size={16} /> Add Mídia
+           {/* Add Media */}
+           <label className="group px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-lg border border-zinc-800 hover:border-blue-500/30 text-zinc-400 hover:text-white cursor-pointer transition-all flex items-center gap-2">
+              <Plus size={18} className="group-hover:text-blue-500 transition-colors" />
+              <span className="text-xs font-bold uppercase tracking-wide">Mídia</span>
               <input type="file" className="hidden" accept="video/*,image/*" onChange={handleFileUpload} />
            </label>
 
-           <button onClick={handleExport} disabled={exporting} className="px-4 py-2 bg-zinc-200 hover:bg-white text-black font-bold rounded flex items-center gap-2 text-xs">
-              <Download size={16} /> Exportar
+           <div className="h-8 w-px bg-zinc-800 mx-2"></div>
+
+           {/* Export */}
+           <button onClick={handleExport} disabled={exporting} className="px-6 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold rounded-lg shadow-lg shadow-amber-900/20 flex items-center gap-2 transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <Download size={18} />
+              <span className="text-xs uppercase tracking-wide">{exporting ? 'Renderizando...' : 'Exportar'}</span>
            </button>
         </div>
       </div>
