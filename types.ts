@@ -50,11 +50,36 @@ export interface LibraryItem {
   videoBlob: Blob; // Arquivo de vídeo
   videoAsset: any; // Objeto técnico da IA necessário para extensão (Novo)
   videoUrl: string; // URL para display
-  type: 'SCENE' | 'EXTENSION';
+  type: 'SCENE' | 'EXTENSION' | 'EDIT'; // Added EDIT type
   
   // Novos Metadados Solicitados
   generationDuration: string; // Tempo de resposta (ex: "14.5s")
   referenceNames: string[]; // Nomes das fotos/arquivos usados
-  voiceSettings: VoiceSettings; // Config de voz usada
-  productionSettings: ProductionSettings; // Config de atmosfera usada
+  voiceSettings?: VoiceSettings; // Config de voz usada
+  productionSettings?: ProductionSettings; // Config de atmosfera usada
+}
+
+// --- EDITOR TYPES ---
+
+export type ClipType = 'VIDEO' | 'IMAGE' | 'AUDIO';
+
+export interface TimelineClip {
+  id: string;
+  type: ClipType;
+  src: string; // Blob URL
+  name: string;
+  startOffset: number; // When does this clip start in the global timeline (seconds)
+  duration: number; // How long it plays on timeline
+  trimStart: number; // Trim from source start
+  volume: number; // 0 to 1
+  layer: number; // Z-index (0 is bottom)
+  opacity: number;
+  transitionIn?: 'FADE' | 'NONE';
+  transitionOut?: 'FADE' | 'NONE';
+}
+
+export interface EditorProject {
+  id: string;
+  clips: TimelineClip[];
+  duration: number; // Total project duration
 }

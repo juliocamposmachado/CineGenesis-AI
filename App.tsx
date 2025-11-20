@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera, ArrowRightCircle } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera, ArrowRightCircle, Scissors } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
-import AudioUploader from './components/AudioUploader'; // NEW
+import AudioUploader from './components/AudioUploader';
+import VideoEditor from './components/VideoEditor'; // NEW
 import SafetyModal from './components/SafetyModal';
-import { UploadedImage, UploadedAudio, AppStatus, VoiceSettings, LibraryItem, ProductionSettings } from './types';
+import { UploadedImage, UploadedAudio, AppStatus, VoiceSettings, LibraryItem, ProductionSettings, TimelineClip } from './types';
 import { checkApiKey, analyzeArchetypes, analyzeVoiceArchetype, generateCinematicVideo, extendCinematicVideo } from './services/geminiService';
 
 // --- IndexedDB Helpers for Video Storage ---
@@ -62,14 +63,13 @@ const deleteVideoFromDB = async (id: string) => {
 
 const App: React.FC = () => {
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
-  const [activeTab, setActiveTab] = useState<'CREATE' | 'LIBRARY'>('CREATE');
+  const [activeTab, setActiveTab] = useState<'CREATE' | 'LIBRARY' | 'EDITOR'>('CREATE');
   
   // Generation State
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
   
   // Visual Assets
   const [images, setImages] = useState<{ A: UploadedImage | null; B: UploadedImage | null }>({ A: null, B: null });
-  // Audio Assets (NEW)
   const [audios, setAudios] = useState<{ A: UploadedAudio | null; B: UploadedAudio | null }>({ A: null, B: null });
   
   const [prompt, setPrompt] = useState('');
@@ -80,13 +80,16 @@ const App: React.FC = () => {
   const [progressMsg, setProgressMsg] = useState('');
   const [isExtensionMode, setIsExtensionMode] = useState(false);
   
+  // Editor State
+  const [editorClips, setEditorClips] = useState<TimelineClip[]>([]);
+
   // Voice Consistency State
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
     characterA: "Voz grave, autoritária, tom melancólico.",
     characterB: "Voz suave, misteriosa, levemente rouca."
   });
 
-  // Production Settings (Transitions & Atmosphere)
+  // Production Settings
   const [productionSettings, setProductionSettings] = useState<ProductionSettings>({
     transitionStart: 'NONE',
     transitionEnd: 'NONE',
@@ -97,33 +100,23 @@ const App: React.FC = () => {
 
   // Library State
   const [library, setLibrary] = useState<LibraryItem[]>([]);
-
-  // API Key State
   const [userApiKey, setUserApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
-
-  // Splash Screen State
   const [showSplash, setShowSplash] = useState(true);
-
-  // Video Ref for Frame Capture
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 4000);
     
-    // Load API Key
     const storedKey = localStorage.getItem('gemini_api_key');
     if (storedKey) setUserApiKey(storedKey);
 
-    // Load Voice Settings
     const storedVoices = localStorage.getItem('voice_settings');
     if (storedVoices) {
       try { setVoiceSettings(JSON.parse(storedVoices)); } catch (e) {}
     }
 
-    // Load Library from IndexedDB
     loadLibrary();
-
     checkApiKey().catch(console.error);
     return () => clearTimeout(timer);
   }, []);
@@ -131,12 +124,10 @@ const App: React.FC = () => {
   const loadLibrary = async () => {
     try {
       const items = await getVideosFromDB();
-      // Recreate URLs from Blobs
       const itemsWithUrls = items.map(item => ({
         ...item,
         videoUrl: URL.createObjectURL(item.videoBlob)
       }));
-      // Sort by date desc
       setLibrary(itemsWithUrls.sort((a, b) => b.timestamp - a.timestamp));
     } catch (err) {
       console.error("Failed to load library", err);
@@ -189,7 +180,6 @@ const App: React.FC = () => {
       };
       setAudios(prev => ({ ...prev, [key]: newAudio }));
 
-      // Automatically analyze the voice upon upload to fill the text setting
       try {
         const description = await analyzeVoiceArchetype(newAudio, userApiKey);
         handleVoiceChange(key === 'A' ? 'characterA' : 'characterB', description);
@@ -207,7 +197,7 @@ const App: React.FC = () => {
     if (!isExtensionMode && (!images.A || !images.B)) return;
 
     setErrorMsg(null);
-    const startTime = performance.now(); // Start Timer
+    const startTime = performance.now();
     
     try {
       const activeKey = userApiKey || process.env.API_KEY;
@@ -232,7 +222,6 @@ const App: React.FC = () => {
         setIsExtensionMode(false); 
         setPrompt(""); 
         
-        // Auto-save to library with metadata
         await saveToLibrary(result.blob, result.videoAsset, "Continuação: " + prompt, 'EXTENSION', duration);
 
       } else {
@@ -256,7 +245,6 @@ const App: React.FC = () => {
         setLastVideoAsset(result.videoAsset);
         setStatus(AppStatus.COMPLETED);
 
-        // Auto-save to library with metadata
         await saveToLibrary(result.blob, result.videoAsset, prompt, 'SCENE', duration);
       }
 
@@ -267,7 +255,7 @@ const App: React.FC = () => {
     }
   };
 
-  const saveToLibrary = async (blob: Blob, videoAsset: any, savedPrompt: string, type: 'SCENE' | 'EXTENSION', duration: string) => {
+  const saveToLibrary = async (blob: Blob, videoAsset: any, savedPrompt: string, type: 'SCENE' | 'EXTENSION' | 'EDIT', duration: string) => {
     const usedImages = [];
     if (images.A) usedImages.push(`${images.A.label}: ${images.A.file.name}`);
     if (images.B) usedImages.push(`${images.B.label}: ${images.B.file.name}`);
@@ -277,12 +265,11 @@ const App: React.FC = () => {
       timestamp: Date.now(),
       prompt: savedPrompt,
       videoBlob: blob,
-      videoAsset: videoAsset, // Saving the asset specifically for future extensions
-      videoUrl: '', // Placeholder
+      videoAsset: videoAsset,
+      videoUrl: '',
       type,
-      // Detailed Metadata
       generationDuration: duration,
-      referenceNames: usedImages.length > 0 ? usedImages : ["Continuidade Anterior"],
+      referenceNames: usedImages.length > 0 ? usedImages : ["Edição/Continuidade"],
       voiceSettings: { ...voiceSettings },
       productionSettings: { ...productionSettings }
     };
@@ -308,26 +295,37 @@ const App: React.FC = () => {
       alert("Erro: Este item não possui dados compatíveis para continuação (ativo expirado ou inválido).");
       return;
     }
-
-    // 1. Restore Settings
-    setVoiceSettings(item.voiceSettings);
-    setProductionSettings(item.productionSettings);
-
-    // 2. Set Video Context for Extension
+    if (item.voiceSettings) setVoiceSettings(item.voiceSettings);
+    if (item.productionSettings) setProductionSettings(item.productionSettings);
     setVideoUrl(item.videoUrl);
     setCurrentBlob(item.videoBlob);
     setLastVideoAsset(item.videoAsset);
-
-    // 3. Set Mode
     setIsExtensionMode(true);
-    setPrompt(""); // Clear prompt so user can type the next action
+    setPrompt("");
     setErrorMsg(null);
-
-    // 4. Switch Tab
     setActiveTab('CREATE');
-    
-    // Scroll to top to see preview
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // --- EDITOR INTEGRATION ---
+  const handleEditFromLibrary = (item: LibraryItem) => {
+    // Convert LibraryItem to TimelineClip
+    const newClip: TimelineClip = {
+      id: Date.now().toString(),
+      type: 'VIDEO',
+      src: item.videoUrl, // Uses the Blob URL
+      name: `Cena_${item.id.slice(-4)}`,
+      startOffset: 0,
+      duration: 5, // Estimate, ideally we'd get this from metadata
+      trimStart: 0,
+      volume: 1,
+      layer: 1,
+      opacity: 1,
+      transitionIn: 'NONE'
+    };
+    
+    setEditorClips([newClip]);
+    setActiveTab('EDITOR');
   };
 
   const handleEnterExtensionMode = () => {
@@ -344,19 +342,13 @@ const App: React.FC = () => {
   const handleSaveFrame = () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
-    
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      // Draw current video frame to canvas
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Convert to data URL
       const dataUrl = canvas.toDataURL('image/png');
-      
-      // Trigger download
       const link = document.createElement('a');
       link.href = dataUrl;
       link.download = `juliette_frame_${Date.now()}.png`;
@@ -371,7 +363,6 @@ const App: React.FC = () => {
     setPrompt(script);
   };
 
-  // Social Links
   const SocialLinks = () => (
     <div className="flex gap-4 items-center justify-center flex-wrap">
       <a href="https://linktr.ee/juliette.psicose" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 transition-colors" title="Ler Livros (Linktree)"><BookOpen size={20} /></a>
@@ -383,7 +374,6 @@ const App: React.FC = () => {
     </div>
   );
 
-  // Splash Screen
   if (showSplash) {
     return (
       <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-6 text-center animate-out fade-out duration-1000 delay-[3500ms] fill-mode-forwards pointer-events-none">
@@ -445,13 +435,18 @@ const App: React.FC = () => {
             </div>
           </div>
           
-          {/* Tab Navigation */}
           <div className="flex bg-zinc-950 rounded-lg p-1 border border-zinc-800">
              <button 
                onClick={() => setActiveTab('CREATE')}
                className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-colors flex items-center gap-2 ${activeTab === 'CREATE' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
              >
                <Film size={14} /> Studio
+             </button>
+             <button 
+               onClick={() => setActiveTab('EDITOR')}
+               className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-colors flex items-center gap-2 ${activeTab === 'EDITOR' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+             >
+               <Scissors size={14} /> Editor (Beta)
              </button>
              <button 
                onClick={() => setActiveTab('LIBRARY')}
@@ -487,17 +482,14 @@ const App: React.FC = () => {
               <div className="grid grid-cols-1 gap-8">
                 {library.map(item => (
                   <div key={item.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col md:flex-row shadow-xl hover:border-amber-900/50 transition-colors">
-                    {/* Video Area */}
                     <div className="md:w-1/2 lg:w-2/5 bg-black relative group">
                       <video src={item.videoUrl} controls className="w-full h-full object-contain bg-black" />
                       <div className="absolute top-3 left-3 px-2 py-1 bg-amber-600 text-white text-[10px] font-bold uppercase rounded shadow-sm">
-                        {item.type === 'EXTENSION' ? 'Continuação' : 'Nova Cena'}
+                        {item.type === 'EXTENSION' ? 'Continuação' : item.type === 'EDIT' ? 'Edição' : 'Nova Cena'}
                       </div>
                     </div>
                     
-                    {/* Info Area */}
                     <div className="md:w-1/2 lg:w-3/5 p-6 flex flex-col gap-4">
-                      {/* Header Info */}
                       <div className="flex items-start justify-between border-b border-zinc-800 pb-3">
                         <div>
                            <div className="flex items-center gap-2 text-amber-500 text-xs font-mono mb-1">
@@ -506,22 +498,15 @@ const App: React.FC = () => {
                               <Clock size={12} /> {new Date(item.timestamp).toLocaleTimeString()}
                            </div>
                            <div className="text-xs text-zinc-400 flex items-center gap-2">
-                              <span className="bg-zinc-800 px-2 py-0.5 rounded text-[10px]">Tempo Geração: <span className="text-white">{item.generationDuration}</span></span>
+                              <span className="bg-zinc-800 px-2 py-0.5 rounded text-[10px]">Duração: <span className="text-white">{item.generationDuration}</span></span>
                            </div>
                         </div>
-                        <button 
-                          onClick={() => handleDeleteFromLibrary(item.id)}
-                          className="text-zinc-600 hover:text-red-500 transition-colors p-1"
-                          title="Apagar vídeo"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <button onClick={() => handleDeleteFromLibrary(item.id)} className="text-zinc-600 hover:text-red-500 transition-colors p-1"><Trash2 size={16} /></button>
                       </div>
 
-                      {/* Detailed Metadata */}
                       <div className="grid grid-cols-2 gap-4 text-xs text-zinc-400 bg-zinc-950/50 p-3 rounded border border-zinc-800/50">
                          <div>
-                            <p className="text-zinc-500 mb-1 flex items-center gap-1 uppercase text-[10px] tracking-wider"><ImageIcon size={10} /> Referências Visuais</p>
+                            <p className="text-zinc-500 mb-1 flex items-center gap-1 uppercase text-[10px] tracking-wider"><ImageIcon size={10} /> Referências</p>
                             <ul className="list-disc list-inside text-zinc-300">
                                {item.referenceNames?.map((ref, i) => <li key={i} className="truncate">{ref}</li>) || <li>N/A</li>}
                             </ul>
@@ -532,28 +517,24 @@ const App: React.FC = () => {
                          </div>
                       </div>
 
-                      {/* Prompt Info */}
                       <div className="flex-1 min-h-[80px]">
-                         <p className="text-zinc-500 mb-1 flex items-center gap-1 uppercase text-[10px] tracking-wider"><FileText size={10} /> Roteiro Solicitado</p>
+                         <p className="text-zinc-500 mb-1 flex items-center gap-1 uppercase text-[10px] tracking-wider"><FileText size={10} /> Roteiro</p>
                          <p className="text-sm text-zinc-200 italic leading-relaxed bg-zinc-950 p-3 rounded border border-zinc-800 h-full overflow-y-auto max-h-[120px] custom-scrollbar">
                            "{item.prompt}"
                          </p>
                       </div>
 
-                      {/* Footer Actions */}
-                      <div className="mt-auto flex items-center gap-3 pt-3 border-t border-zinc-800">
-                        <button 
-                          onClick={() => handleContinueFromLibrary(item)}
-                          className="flex-1 flex items-center justify-center gap-2 bg-amber-700 hover:bg-amber-600 text-white py-2 rounded text-xs font-bold transition-colors shadow-lg shadow-amber-900/20"
-                        >
-                          <ArrowRightCircle size={14} /> Continuar Cena
+                      <div className="mt-auto flex items-center gap-3 pt-3 border-t border-zinc-800 flex-wrap">
+                        {item.videoAsset && (
+                          <button onClick={() => handleContinueFromLibrary(item)} className="flex-1 flex items-center justify-center gap-2 bg-amber-700 hover:bg-amber-600 text-white py-2 rounded text-xs font-bold transition-colors">
+                            <ArrowRightCircle size={14} /> Continuar
+                          </button>
+                        )}
+                        <button onClick={() => handleEditFromLibrary(item)} className="flex-1 flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 text-white py-2 rounded text-xs font-bold transition-colors">
+                           <Scissors size={14} /> Editar no Studio
                         </button>
-                        <a 
-                          href={item.videoUrl} 
-                          download={`juliette_psicose_${item.id}.mp4`}
-                          className="flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded text-xs font-bold transition-colors"
-                        >
-                          <Download size={14} /> Download MP4
+                        <a href={item.videoUrl} download={`juliette_${item.id}.mp4`} className="flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded text-xs font-bold transition-colors">
+                          <Download size={14} /> Baixar
                         </a>
                       </div>
                     </div>
@@ -562,6 +543,23 @@ const App: React.FC = () => {
               </div>
             )}
           </div>
+        )}
+
+        {/* --- EDITOR TAB --- */}
+        {activeTab === 'EDITOR' && (
+           <div className="animate-in fade-in">
+              <div className="flex items-center justify-between mb-6">
+                 <h2 className="text-xl font-cinema text-white flex items-center gap-2">
+                    <Scissors size={20} className="text-amber-500" /> Frame Editor & Compositor (Beta)
+                 </h2>
+              </div>
+              <div className="h-[80vh]">
+                 <VideoEditor 
+                    initialClips={editorClips}
+                    onSaveToLibrary={(blob, duration) => saveToLibrary(blob, null, "Edição de Vídeo Customizada", 'EDIT', duration.toFixed(2) + 's')}
+                 />
+              </div>
+           </div>
         )}
 
         {/* --- CREATE TAB --- */}
@@ -600,28 +598,13 @@ const App: React.FC = () => {
                   Elenco & Voz (Referências)
                 </h2>
                 <div className="grid grid-cols-2 gap-6">
-                  {/* Protagonist Column */}
                   <div className="flex flex-col gap-3">
                     <ImageUploader label="Protagonista" image={images.A} onUpload={(f) => handleImageUpload(f, 'A')} onRemove={() => setImages(p => ({ ...p, A: null }))} />
-                    <AudioUploader 
-                      label="Voz Protagonista (Ref)" 
-                      audio={audios.A} 
-                      onUpload={(f) => handleAudioUpload(f, 'A')} 
-                      onRemove={() => setAudios(p => ({ ...p, A: null }))}
-                      isAnalyzing={status === AppStatus.ANALYZING_AUDIO}
-                    />
+                    <AudioUploader label="Voz Protagonista (Ref)" audio={audios.A} onUpload={(f) => handleAudioUpload(f, 'A')} onRemove={() => setAudios(p => ({ ...p, A: null }))} isAnalyzing={status === AppStatus.ANALYZING_AUDIO} />
                   </div>
-
-                  {/* Antagonist Column */}
                   <div className="flex flex-col gap-3">
                     <ImageUploader label="Antagonista" image={images.B} onUpload={(f) => handleImageUpload(f, 'B')} onRemove={() => setImages(p => ({ ...p, B: null }))} />
-                    <AudioUploader 
-                      label="Voz Antagonista (Ref)" 
-                      audio={audios.B} 
-                      onUpload={(f) => handleAudioUpload(f, 'B')} 
-                      onRemove={() => setAudios(p => ({ ...p, B: null }))}
-                      isAnalyzing={status === AppStatus.ANALYZING_AUDIO}
-                    />
+                    <AudioUploader label="Voz Antagonista (Ref)" audio={audios.B} onUpload={(f) => handleAudioUpload(f, 'B')} onRemove={() => setAudios(p => ({ ...p, B: null }))} isAnalyzing={status === AppStatus.ANALYZING_AUDIO} />
                   </div>
                 </div>
               </section>
@@ -632,97 +615,49 @@ const App: React.FC = () => {
                   <span className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-400">2</span>
                   Consistência Vocal (Texto)
                 </h2>
-                <p className="text-[10px] text-zinc-500 mb-2">
-                  *Se enviar áudio acima, estes campos serão preenchidos automaticamente pela IA.
-                </p>
                 <div className="space-y-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800">
                   <div className="space-y-1">
                     <label className="text-xs text-zinc-500 flex items-center gap-1"><Mic2 size={10} /> Descrição Voz Protagonista</label>
-                    <input 
-                      type="text" 
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white placeholder-zinc-600 focus:border-amber-500 focus:outline-none"
-                      placeholder="Ex: Grave, autoritária, sotaque nordestino..."
-                      value={voiceSettings.characterA}
-                      onChange={(e) => handleVoiceChange('characterA', e.target.value)}
-                    />
+                    <input type="text" className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Ex: Grave, autoritária..." value={voiceSettings.characterA} onChange={(e) => handleVoiceChange('characterA', e.target.value)} />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-zinc-500 flex items-center gap-1"><Mic2 size={10} /> Descrição Voz Antagonista</label>
-                    <input 
-                      type="text" 
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white placeholder-zinc-600 focus:border-amber-500 focus:outline-none"
-                      placeholder="Ex: Suave, sussurrada, tom ameaçador..."
-                      value={voiceSettings.characterB}
-                      onChange={(e) => handleVoiceChange('characterB', e.target.value)}
-                    />
+                    <input type="text" className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Ex: Suave, misteriosa..." value={voiceSettings.characterB} onChange={(e) => handleVoiceChange('characterB', e.target.value)} />
                   </div>
                 </div>
               </section>
 
-              {/* Transitions & Atmosphere (NEW SECTION) */}
+              {/* Transitions */}
               <section>
                 <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
                   <span className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-400">3</span>
                   Transições & Atmosfera
                 </h2>
                 <div className="space-y-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800">
-                  
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <label className="text-[10px] text-zinc-500 uppercase flex items-center gap-1"><SunMoon size={10} /> Início Cena</label>
-                      <select 
-                        value={productionSettings.transitionStart}
-                        onChange={(e) => handleProductionChange('transitionStart', e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-700 rounded p-1.5 text-xs text-white focus:border-amber-500 outline-none"
-                      >
-                        <option value="NONE">Corte Seco (Padrão)</option>
-                        <option value="FADE_IN">Fade In (Do Preto)</option>
+                      <select value={productionSettings.transitionStart} onChange={(e) => handleProductionChange('transitionStart', e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded p-1.5 text-xs text-white focus:border-amber-500 outline-none">
+                        <option value="NONE">Corte Seco</option>
+                        <option value="FADE_IN">Fade In</option>
                         <option value="BLUR_IN">Foco Progressivo</option>
                       </select>
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] text-zinc-500 uppercase flex items-center gap-1"><SunMoon size={10} /> Fim Cena</label>
-                      <select 
-                         value={productionSettings.transitionEnd}
-                         onChange={(e) => handleProductionChange('transitionEnd', e.target.value)}
-                         className="w-full bg-zinc-950 border border-zinc-700 rounded p-1.5 text-xs text-white focus:border-amber-500 outline-none"
-                      >
+                      <select value={productionSettings.transitionEnd} onChange={(e) => handleProductionChange('transitionEnd', e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded p-1.5 text-xs text-white focus:border-amber-500 outline-none">
                         <option value="NONE">Sem Transição</option>
-                        <option value="FADE_OUT">Fade Out (Para Preto)</option>
+                        <option value="FADE_OUT">Fade Out</option>
                       </select>
                     </div>
                   </div>
-
                   <div className="flex items-center justify-between py-1 px-1">
-                     <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          checked={productionSettings.audioFadeIn}
-                          onChange={(e) => handleProductionChange('audioFadeIn', e.target.checked)}
-                          className="accent-amber-500"
-                        />
-                        Audio Fade In
-                     </label>
-                     <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          checked={productionSettings.audioFadeOut}
-                          onChange={(e) => handleProductionChange('audioFadeOut', e.target.checked)}
-                          className="accent-amber-500"
-                        />
-                        Audio Fade Out
-                     </label>
+                     <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer"><input type="checkbox" checked={productionSettings.audioFadeIn} onChange={(e) => handleProductionChange('audioFadeIn', e.target.checked)} className="accent-amber-500" /> Audio Fade In</label>
+                     <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer"><input type="checkbox" checked={productionSettings.audioFadeOut} onChange={(e) => handleProductionChange('audioFadeOut', e.target.checked)} className="accent-amber-500" /> Audio Fade Out</label>
                   </div>
-
                   <div className="space-y-1 border-t border-zinc-800 pt-2">
                     <label className="text-xs text-zinc-500 flex items-center gap-1"><Volume2 size={10} /> Som Ambiente (IA Mixer)</label>
-                    <input 
-                      type="text" 
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white placeholder-zinc-600 focus:border-amber-500 focus:outline-none"
-                      placeholder="Ex: Chuva batendo no vidro, sirenes distantes..."
-                      value={productionSettings.ambientSound}
-                      onChange={(e) => handleProductionChange('ambientSound', e.target.value)}
-                    />
+                    <input type="text" className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Ex: Chuva..." value={productionSettings.ambientSound} onChange={(e) => handleProductionChange('ambientSound', e.target.value)} />
                   </div>
                 </div>
               </section>
@@ -731,28 +666,18 @@ const App: React.FC = () => {
               <section>
                 <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2 justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-400">
-                      {isExtensionMode ? '+' : '4'}
-                    </span>
+                    <span className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-400">{isExtensionMode ? '+' : '4'}</span>
                     {isExtensionMode ? 'Continuação da Cena' : 'Roteiro da Cena'}
                   </div>
                   <div>
-                    {!isExtensionMode && (
-                      <button onClick={loadPilotScript} className="text-xs text-amber-500 hover:underline mr-3">
-                        Carregar Roteiro Piloto
-                      </button>
-                    )}
-                    {isExtensionMode && (
-                      <button onClick={handleCancelExtension} className="text-xs text-red-500 hover:underline">Cancelar Extensão</button>
-                    )}
+                    {!isExtensionMode && <button onClick={loadPilotScript} className="text-xs text-amber-500 hover:underline mr-3">Carregar Roteiro Piloto</button>}
+                    {isExtensionMode && <button onClick={handleCancelExtension} className="text-xs text-red-500 hover:underline">Cancelar Extensão</button>}
                   </div>
                 </h2>
                 
                 <textarea
-                  className={`w-full h-32 bg-zinc-900/50 border rounded-xl p-4 text-sm text-white placeholder-zinc-600 focus:outline-none resize-none
-                    ${isExtensionMode ? 'border-amber-600/50 focus:ring-1 focus:ring-amber-500' : 'border-zinc-700 focus:ring-1 focus:ring-amber-500/50'}
-                  `}
-                  placeholder={isExtensionMode ? "Ação seguinte (mantendo voz e visual)..." : "Descreva a ação e diálogos..."}
+                  className={`w-full h-32 bg-zinc-900/50 border rounded-xl p-4 text-sm text-white placeholder-zinc-600 focus:outline-none resize-none ${isExtensionMode ? 'border-amber-600/50 focus:ring-1 focus:ring-amber-500' : 'border-zinc-700 focus:ring-1 focus:ring-amber-500/50'}`}
+                  placeholder={isExtensionMode ? "Ação seguinte..." : "Descreva a ação e diálogos..."}
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                 />
@@ -761,14 +686,7 @@ const App: React.FC = () => {
               <button
                 onClick={handleGenerate}
                 disabled={(!isExtensionMode && (!images.A || !images.B)) || !prompt || isProcessing}
-                className={`w-full py-4 rounded-xl font-bold uppercase tracking-wide text-sm transition-all flex items-center justify-center gap-3 shadow-xl
-                  ${(!prompt || (!isExtensionMode && (!images.A || !images.B)) || isProcessing) 
-                    ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' 
-                    : isExtensionMode
-                      ? 'bg-amber-700 hover:bg-amber-600 text-white'
-                      : 'bg-red-900 hover:bg-red-800 text-white'
-                  }
-                `}
+                className={`w-full py-4 rounded-xl font-bold uppercase tracking-wide text-sm transition-all flex items-center justify-center gap-3 shadow-xl ${(!prompt || (!isExtensionMode && (!images.A || !images.B)) || isProcessing) ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : isExtensionMode ? 'bg-amber-700 hover:bg-amber-600 text-white' : 'bg-red-900 hover:bg-red-800 text-white'}`}
               >
                 {isProcessing ? <Loader2 className="animate-spin" /> : isExtensionMode ? <PlusCircle size={16} /> : <Play size={16} />}
                 {isProcessing ? (status === AppStatus.EXTENDING ? 'Estendendo...' : status === AppStatus.ANALYZING_AUDIO ? 'Analisando Voz...' : 'Produzindo...') : isExtensionMode ? 'Gerar Continuação' : 'Gerar Cena'}
@@ -811,11 +729,7 @@ const App: React.FC = () => {
                       <video ref={videoRef} controls autoPlay loop className="w-full rounded-lg shadow-2xl border border-zinc-700" src={videoUrl} />
                       <div className="mt-4 flex justify-between items-center bg-zinc-900 p-4 rounded border border-zinc-800 flex-wrap gap-2">
                         <span className="text-xs text-green-500 flex items-center gap-1 mr-auto"><Save size={12} /> Salvo automaticamente na Biblioteca</span>
-                        
-                        <button onClick={handleSaveFrame} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded font-bold flex items-center gap-2 border border-zinc-700">
-                           <Camera size={14} /> Salvar Frame (Ref)
-                        </button>
-
+                        <button onClick={handleSaveFrame} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded font-bold flex items-center gap-2 border border-zinc-700"><Camera size={14} /> Salvar Frame (Ref)</button>
                         {!isExtensionMode && (
                           <button onClick={handleEnterExtensionMode} className="px-4 py-2 bg-amber-700 hover:bg-amber-600 text-white text-xs rounded font-bold flex items-center gap-2">
                             <PlusCircle size={14} /> Estender (+5s)
@@ -844,7 +758,6 @@ const App: React.FC = () => {
               <span className="hover:text-zinc-400 transition-colors cursor-default">+55 11 97060-3441</span>
             </div>
           </div>
-          
           <SocialLinks />
         </div>
         <div className="text-center text-[10px] text-zinc-800 mt-6 border-t border-zinc-900/50 pt-4">
