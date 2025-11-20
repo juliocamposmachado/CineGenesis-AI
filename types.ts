@@ -83,3 +83,16 @@ export interface EditorProject {
   clips: TimelineClip[];
   duration: number; // Total project duration
 }
+
+// --- AUTH TYPES ---
+
+export interface User {
+  email: string;
+  isAdmin: boolean;
+  hasActiveSubscription: boolean;
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: User | null;
+}

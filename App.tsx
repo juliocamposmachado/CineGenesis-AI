@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera, ArrowRightCircle, Scissors, Layers } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera, ArrowRightCircle, Scissors, Layers, Share2 } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import AudioUploader from './components/AudioUploader';
-import VideoEditor from './components/VideoEditor'; // NEW
+import VideoEditor from './components/VideoEditor';
 import SafetyModal from './components/SafetyModal';
-import { UploadedImage, UploadedAudio, AppStatus, VoiceSettings, LibraryItem, ProductionSettings, TimelineClip } from './types';
+import AuthGate from './components/AuthGate'; // PAYWALL
+import { UploadedImage, UploadedAudio, AppStatus, VoiceSettings, LibraryItem, ProductionSettings, TimelineClip, User } from './types';
 import { checkApiKey, analyzeArchetypes, analyzeVoiceArchetype, generateCinematicVideo, extendCinematicVideo } from './services/geminiService';
 
 // --- IndexedDB Helpers for Video Storage ---
@@ -62,6 +63,10 @@ const deleteVideoFromDB = async (id: string) => {
 // --- Main Component ---
 
 const App: React.FC = () => {
+  // Auth State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
   const [activeTab, setActiveTab] = useState<'CREATE' | 'LIBRARY' | 'EDITOR'>('CREATE');
   
@@ -106,8 +111,7 @@ const App: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 4000);
-    
+    // Initialize Logic
     const storedKey = localStorage.getItem('gemini_api_key');
     if (storedKey) setUserApiKey(storedKey);
 
@@ -118,8 +122,22 @@ const App: React.FC = () => {
 
     loadLibrary();
     checkApiKey().catch(console.error);
-    return () => clearTimeout(timer);
   }, []);
+
+  // Trigger Splash timer ONLY after Authentication is done
+  useEffect(() => {
+    if (isAuthenticated && showSplash) {
+      const timer = setTimeout(() => setShowSplash(false), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated, showSplash]);
+
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+    // Trigger Splash Screen appearance
+    setShowSplash(true);
+  };
 
   const loadLibrary = async () => {
     try {
@@ -358,6 +376,31 @@ const App: React.FC = () => {
     }
   };
 
+  const handleShareVideo = async () => {
+    if (!currentBlob) return;
+
+    try {
+      // Criar um arquivo a partir do Blob para compartilhamento
+      const file = new File([currentBlob], "juliette_psicose_cena.mp4", { type: "video/mp4" });
+      
+      const shareData = {
+        title: "CineGenesis: Juliette Psicose",
+        text: `Confira esta cena cinematográfica gerada por IA!\nRoteiro: "${prompt}"\n\n#JuliettePsicose #CineGenesisAI`,
+        files: [file]
+      };
+
+      // @ts-ignore - canShare and share support check
+      if (navigator.canShare && navigator.canShare(shareData)) {
+        await navigator.share(shareData);
+      } else {
+        // Fallback para navegadores que não suportam envio de arquivos (Desktop comum)
+        alert("Seu navegador não suporta compartilhamento direto do arquivo de vídeo. Por favor, use o botão 'Baixar' e compartilhe manualmente.");
+      }
+    } catch (err) {
+      console.error("Erro ao compartilhar:", err);
+    }
+  };
+
   const loadPilotScript = () => {
     const script = `CENA 1 - INT. CORREDOR - NOITE\n\nA câmera inicia com um leve CLOSE-UP nos olhos da MULHER (Juliette) enquanto ela respira fundo, carregando dúvida e intensidade.\n\nMULHER: "Às vezes sinto que o meu próprio silêncio pesa mais do que as palavras que não digo."\n\nHOMEM (Guia): "O silêncio só pesa quando tentamos ignorar o que ele tenta revelar."\n\nA câmera faz um TRAVELLING lateral lento, ampliando a profundidade emocional.\n\nMULHER: "E se eu não estiver pronta para ouvir?"\n\nHOMEM: "Ninguém está. A prontidão nasce quando damos o primeiro passo."\n\nOs dois personagens dão alguns passos no corredor iluminado por luz difusa.`;
     setPrompt(script);
@@ -375,6 +418,12 @@ const App: React.FC = () => {
     </div>
   );
 
+  // 1. Render AUTH GATE first if not authenticated
+  if (!isAuthenticated) {
+    return <AuthGate onLogin={handleLoginSuccess} />;
+  }
+
+  // 2. Render SPLASH SCREEN briefly after auth
   if (showSplash) {
     return (
       <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-6 text-center animate-out fade-out duration-1000 delay-[3500ms] fill-mode-forwards pointer-events-none">
@@ -420,6 +469,7 @@ const App: React.FC = () => {
 
   const isProcessing = status === AppStatus.ANALYZING || status === AppStatus.GENERATING || status === AppStatus.EXTENDING || status === AppStatus.ANALYZING_AUDIO;
 
+  // 3. Render MAIN APP
   return (
     <div className="min-h-screen bg-black text-zinc-200 selection:bg-amber-500/30 flex flex-col">
       {!disclaimerAccepted && <SafetyModal onAccept={() => setDisclaimerAccepted(true)} />}
@@ -731,6 +781,11 @@ const App: React.FC = () => {
                       <video ref={videoRef} controls autoPlay loop className="w-full rounded-lg shadow-2xl border border-zinc-700" src={videoUrl} />
                       <div className="mt-4 flex justify-between items-center bg-zinc-900 p-4 rounded border border-zinc-800 flex-wrap gap-2">
                         <span className="text-xs text-green-500 flex items-center gap-1 mr-auto"><Save size={12} /> Salvo automaticamente na Biblioteca</span>
+                        
+                        <button onClick={handleShareVideo} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white text-xs rounded font-bold flex items-center gap-2 border border-zinc-600">
+                          <Share2 size={14} /> Compartilhar
+                        </button>
+                        
                         <button onClick={handleSaveFrame} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded font-bold flex items-center gap-2 border border-zinc-700"><Camera size={14} /> Salvar Frame (Ref)</button>
                         {!isExtensionMode && (
                           <button onClick={handleEnterExtensionMode} className="px-4 py-2 bg-amber-700 hover:bg-amber-600 text-white text-xs rounded font-bold flex items-center gap-2">
