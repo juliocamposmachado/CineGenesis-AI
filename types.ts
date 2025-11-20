@@ -36,10 +36,15 @@ export interface ProductionSettings {
 
 export interface LibraryItem {
   id: string;
-  timestamp: number;
-  prompt: string;
-  videoBlob: Blob; // Stored in IndexedDB
-  videoUrl: string; // Generated URL for display
-  voiceSettings: VoiceSettings;
+  timestamp: number; // Data e Hora
+  prompt: string; // Texto inserido
+  videoBlob: Blob; // Arquivo de vídeo
+  videoUrl: string; // URL para display
   type: 'SCENE' | 'EXTENSION';
+  
+  // Novos Metadados Solicitados
+  generationDuration: string; // Tempo de resposta (ex: "14.5s")
+  referenceNames: string[]; // Nomes das fotos/arquivos usados
+  voiceSettings: VoiceSettings; // Config de voz usada
+  productionSettings: ProductionSettings; // Config de atmosfera usada
 }

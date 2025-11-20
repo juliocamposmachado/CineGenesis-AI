@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import SafetyModal from './components/SafetyModal';
 import { UploadedImage, AppStatus, VoiceSettings, LibraryItem, ProductionSettings } from './types';
@@ -171,6 +171,7 @@ const App: React.FC = () => {
     if (!isExtensionMode && (!images.A || !images.B)) return;
 
     setErrorMsg(null);
+    const startTime = performance.now(); // Start Timer
     
     try {
       const activeKey = userApiKey || process.env.API_KEY;
@@ -185,6 +186,9 @@ const App: React.FC = () => {
         
         const result = await extendCinematicVideo(lastVideoAsset, prompt, voiceSettings, productionSettings, userApiKey);
         
+        const endTime = performance.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2) + "s";
+
         setVideoUrl(result.videoUrl);
         setCurrentBlob(result.blob);
         setLastVideoAsset(result.videoAsset);
@@ -192,8 +196,8 @@ const App: React.FC = () => {
         setIsExtensionMode(false); 
         setPrompt(""); 
         
-        // Auto-save to library
-        await saveToLibrary(result.blob, "Continuação: " + prompt, 'EXTENSION');
+        // Auto-save to library with metadata
+        await saveToLibrary(result.blob, "Continuação: " + prompt, 'EXTENSION', duration);
 
       } else {
         if (!images.A || !images.B) return;
@@ -208,13 +212,16 @@ const App: React.FC = () => {
         
         const result = await generateCinematicVideo(uploadedImages, prompt, archetypes, voiceSettings, productionSettings, userApiKey);
         
+        const endTime = performance.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2) + "s";
+        
         setVideoUrl(result.videoUrl);
         setCurrentBlob(result.blob);
         setLastVideoAsset(result.videoAsset);
         setStatus(AppStatus.COMPLETED);
 
-        // Auto-save to library
-        await saveToLibrary(result.blob, prompt, 'SCENE');
+        // Auto-save to library with metadata
+        await saveToLibrary(result.blob, prompt, 'SCENE', duration);
       }
 
     } catch (err: any) {
@@ -224,23 +231,31 @@ const App: React.FC = () => {
     }
   };
 
-  const saveToLibrary = async (blob: Blob, savedPrompt: string, type: 'SCENE' | 'EXTENSION') => {
+  const saveToLibrary = async (blob: Blob, savedPrompt: string, type: 'SCENE' | 'EXTENSION', duration: string) => {
+    const usedImages = [];
+    if (images.A) usedImages.push(`${images.A.label}: ${images.A.file.name}`);
+    if (images.B) usedImages.push(`${images.B.label}: ${images.B.file.name}`);
+    
     const newItem: LibraryItem = {
       id: Date.now().toString(),
       timestamp: Date.now(),
       prompt: savedPrompt,
       videoBlob: blob,
-      videoUrl: '', // Placeholder, set on load
-      voiceSettings: voiceSettings,
-      type
+      videoUrl: '', // Placeholder
+      type,
+      // Detailed Metadata
+      generationDuration: duration,
+      referenceNames: usedImages.length > 0 ? usedImages : ["Continuidade Anterior"],
+      voiceSettings: { ...voiceSettings },
+      productionSettings: { ...productionSettings }
     };
     
     try {
       await saveVideoToDB(newItem);
-      await loadLibrary(); // Refresh UI
+      await loadLibrary(); 
     } catch (e) {
       console.error("Failed to save to local library", e);
-      setErrorMsg("Vídeo gerado, mas falha ao salvar na biblioteca local (Espaço cheio?).");
+      setErrorMsg("Vídeo gerado, mas falha ao salvar na biblioteca local.");
     }
   };
 
@@ -375,32 +390,71 @@ const App: React.FC = () => {
                 <button onClick={() => setActiveTab('CREATE')} className="mt-4 text-amber-500 hover:underline text-sm">Criar novo vídeo</button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-8">
                 {library.map(item => (
-                  <div key={item.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col shadow-lg hover:border-zinc-600 transition-colors">
-                    <div className="aspect-video bg-black relative group">
-                      <video src={item.videoUrl} controls className="w-full h-full object-cover" />
-                      <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 text-white text-[10px] rounded backdrop-blur">
-                        {item.type === 'EXTENSION' ? 'CONTINUAÇÃO' : 'CENA'}
+                  <div key={item.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col md:flex-row shadow-xl hover:border-amber-900/50 transition-colors">
+                    {/* Video Area */}
+                    <div className="md:w-1/2 lg:w-2/5 bg-black relative group">
+                      <video src={item.videoUrl} controls className="w-full h-full object-contain bg-black" />
+                      <div className="absolute top-3 left-3 px-2 py-1 bg-amber-600 text-white text-[10px] font-bold uppercase rounded shadow-sm">
+                        {item.type === 'EXTENSION' ? 'Continuação' : 'Nova Cena'}
                       </div>
                     </div>
-                    <div className="p-4 flex-1 flex flex-col">
-                      <p className="text-xs text-zinc-500 mb-2">{new Date(item.timestamp).toLocaleString()}</p>
-                      <p className="text-sm text-zinc-200 line-clamp-3 mb-4 italic">"{item.prompt}"</p>
-                      <div className="mt-auto flex items-center justify-between gap-2 pt-3 border-t border-zinc-800">
+                    
+                    {/* Info Area */}
+                    <div className="md:w-1/2 lg:w-3/5 p-6 flex flex-col gap-4">
+                      {/* Header Info */}
+                      <div className="flex items-start justify-between border-b border-zinc-800 pb-3">
+                        <div>
+                           <div className="flex items-center gap-2 text-amber-500 text-xs font-mono mb-1">
+                              <Calendar size={12} /> {new Date(item.timestamp).toLocaleDateString()} 
+                              <span className="text-zinc-600">|</span>
+                              <Clock size={12} /> {new Date(item.timestamp).toLocaleTimeString()}
+                           </div>
+                           <div className="text-xs text-zinc-400 flex items-center gap-2">
+                              <span className="bg-zinc-800 px-2 py-0.5 rounded text-[10px]">Tempo Geração: <span className="text-white">{item.generationDuration}</span></span>
+                           </div>
+                        </div>
+                        <button 
+                          onClick={() => handleDeleteFromLibrary(item.id)}
+                          className="text-zinc-600 hover:text-red-500 transition-colors p-1"
+                          title="Apagar vídeo"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+
+                      {/* Detailed Metadata */}
+                      <div className="grid grid-cols-2 gap-4 text-xs text-zinc-400 bg-zinc-950/50 p-3 rounded border border-zinc-800/50">
+                         <div>
+                            <p className="text-zinc-500 mb-1 flex items-center gap-1 uppercase text-[10px] tracking-wider"><ImageIcon size={10} /> Referências Visuais</p>
+                            <ul className="list-disc list-inside text-zinc-300">
+                               {item.referenceNames?.map((ref, i) => <li key={i} className="truncate">{ref}</li>) || <li>N/A</li>}
+                            </ul>
+                         </div>
+                         <div>
+                            <p className="text-zinc-500 mb-1 flex items-center gap-1 uppercase text-[10px] tracking-wider"><Volume2 size={10} /> Atmosfera</p>
+                            <p className="text-zinc-300 line-clamp-2">{item.productionSettings?.ambientSound || "Padrão"}</p>
+                         </div>
+                      </div>
+
+                      {/* Prompt Info */}
+                      <div className="flex-1 min-h-[80px]">
+                         <p className="text-zinc-500 mb-1 flex items-center gap-1 uppercase text-[10px] tracking-wider"><FileText size={10} /> Roteiro Solicitado</p>
+                         <p className="text-sm text-zinc-200 italic leading-relaxed bg-zinc-950 p-3 rounded border border-zinc-800 h-full overflow-y-auto max-h-[120px] custom-scrollbar">
+                           "{item.prompt}"
+                         </p>
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="mt-auto flex items-center gap-3 pt-3 border-t border-zinc-800">
                         <a 
                           href={item.videoUrl} 
                           download={`juliette_psicose_${item.id}.mp4`}
-                          className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white transition-colors"
+                          className="flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded text-xs font-bold transition-colors"
                         >
-                          <Download size={14} /> Salvar
+                          <Download size={14} /> Download MP4
                         </a>
-                        <button 
-                          onClick={() => handleDeleteFromLibrary(item.id)}
-                          className="flex items-center gap-1 text-xs text-red-900 hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 size={14} /> Apagar
-                        </button>
                       </div>
                     </div>
                   </div>
