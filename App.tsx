@@ -70,8 +70,13 @@ const App: React.FC = () => {
 
     try {
       // Check if we have a key (either user provided or env)
-      if (!userApiKey) {
-        await checkApiKey();
+      const activeKey = userApiKey || process.env.API_KEY;
+      if (!activeKey) {
+         // If no key, try the extension flow
+         const hasExtensionKey = await checkApiKey();
+         if (!hasExtensionKey) {
+             throw new Error("Chave de API necessária. Por favor, insira sua chave no painel lateral.");
+         }
       }
 
       // 1. Analyze Archetypes
@@ -94,7 +99,7 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       setStatus(AppStatus.ERROR);
-      setErrorMsg(err.message || "Ocorreu um erro desconhecido durante a geração. Verifique se sua chave de API tem permissões para Veo.");
+      setErrorMsg(err.message || "Ocorreu um erro desconhecido durante a geração.");
     }
   };
 
@@ -112,7 +117,7 @@ const App: React.FC = () => {
   // Splash Screen
   if (showSplash) {
     return (
-      <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-6 text-center animate-out fade-out duration-1000 delay-[3500ms] fill-mode-forwards">
+      <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-6 text-center animate-out fade-out duration-1000 delay-[3500ms] fill-mode-forwards pointer-events-none">
         <div className="mb-8 animate-pulse">
           <div className="p-6 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-2xl shadow-orange-900/50 inline-block mb-6">
             <Clapperboard className="text-white w-16 h-16" />
@@ -121,7 +126,7 @@ const App: React.FC = () => {
           <p className="text-amber-500 uppercase tracking-[0.4em] text-sm">Cinematic Video Generator</p>
         </div>
         
-        <div className="space-y-4 max-w-md w-full bg-zinc-900/50 p-6 rounded-xl border border-zinc-800 backdrop-blur-sm">
+        <div className="space-y-4 max-w-md w-full bg-zinc-900/50 p-6 rounded-xl border border-zinc-800 backdrop-blur-sm shadow-2xl">
           <div>
             <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Desenvolvido por</p>
             <h2 className="text-xl font-bold text-white">Julio Campos Machado</h2>
@@ -130,16 +135,16 @@ const App: React.FC = () => {
           
           <div className="h-px bg-zinc-800 w-full my-4"></div>
           
-          <div className="flex flex-col gap-2 text-sm text-zinc-400">
-            <div className="flex items-center justify-center gap-2">
+          <div className="flex flex-col gap-3 text-sm text-zinc-400">
+            <div className="flex items-center justify-center gap-2 hover:text-white transition-colors">
               <Phone size={14} className="text-amber-500" />
               <span>+55 11 99294-6628</span>
             </div>
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 hover:text-white transition-colors">
               <Phone size={14} className="text-amber-500" />
               <span>+55 11 97060-3441</span>
             </div>
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 hover:text-white transition-colors">
               <Phone size={14} className="text-amber-500" />
               <span>+55 11 3680-8030</span>
             </div>
@@ -182,9 +187,9 @@ const App: React.FC = () => {
           <div className="lg:col-span-4 space-y-8">
             
             {/* API Key Section */}
-            <section className="bg-zinc-900/30 p-4 rounded-xl border border-zinc-800">
+            <section className="bg-zinc-900/30 p-4 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-colors">
               <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Key size={14} /> Configuração da API
+                <Key size={14} className="text-amber-500" /> Configuração da API
               </h2>
               <div className="relative">
                 <input
@@ -192,18 +197,18 @@ const App: React.FC = () => {
                   value={userApiKey}
                   onChange={handleApiKeyChange}
                   placeholder="Cole sua Gemini API Key aqui..."
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg py-2 pl-3 pr-10 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all"
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg py-3 pl-3 pr-10 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all"
                 />
                 <button
                   onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-1"
                   title={showApiKey ? "Ocultar chave" : "Mostrar chave"}
                 >
                   {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-              <p className="text-[10px] text-zinc-600 mt-2">
-                Sua chave será salva localmente no navegador para uso futuro.
+              <p className="text-[10px] text-zinc-500 mt-2 flex items-center gap-1">
+                <Sparkles size={10} /> A chave é salva automaticamente no seu navegador.
               </p>
             </section>
 
@@ -274,9 +279,9 @@ const App: React.FC = () => {
             </button>
 
             {status === AppStatus.ERROR && (
-              <div className="p-4 bg-red-900/20 border border-red-800/50 rounded-lg flex items-start gap-3">
+              <div className="p-4 bg-red-900/20 border border-red-800/50 rounded-lg flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
                 <AlertCircle className="text-red-500 shrink-0" size={20} />
-                <p className="text-sm text-red-300">{errorMsg}</p>
+                <p className="text-sm text-red-300 leading-relaxed">{errorMsg}</p>
               </div>
             )}
           </div>
@@ -334,6 +339,13 @@ const App: React.FC = () => {
                       <h4 className="text-amber-500 text-xs font-bold uppercase mb-1">Prompt Otimizado Gerado</h4>
                       <p className="text-zinc-400 text-xs italic">"{prompt.slice(0, 100)}..."</p>
                     </div>
+                    <a 
+                      href={videoUrl} 
+                      download="cinegenesis_scene.mp4"
+                      className="mt-4 inline-flex items-center justify-center px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs rounded transition-colors w-fit"
+                    >
+                      Download MP4
+                    </a>
                   </div>
                 )}
               </div>
@@ -349,16 +361,16 @@ const App: React.FC = () => {
             <p className="text-zinc-500 text-xs mt-1">Desenvolvedor Full Stack: <span className="text-zinc-300">Julio Campos Machado</span></p>
             <div className="flex flex-wrap gap-3 text-[10px] text-zinc-600 mt-2 justify-center md:justify-start">
               <span>+55 11 99294-6628</span>
-              <span>•</span>
+              <span className="text-zinc-800">•</span>
               <span>+55 11 97060-3441</span>
-              <span>•</span>
+              <span className="text-zinc-800">•</span>
               <span>+55 11 3680-8030</span>
             </div>
           </div>
           
           <SocialLinks />
         </div>
-        <div className="text-center text-[10px] text-zinc-700 mt-6">
+        <div className="text-center text-[10px] text-zinc-800 mt-6 border-t border-zinc-900/50 pt-4">
           &copy; {new Date().getFullYear()} CineGenesis AI. Todos os direitos reservados.
         </div>
       </footer>

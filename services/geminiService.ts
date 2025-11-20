@@ -111,8 +111,18 @@ export const generateCinematicVideo = async (
       operation = await ai.operations.getVideosOperation({ operation: operation });
     }
 
+    // Check for specific operation errors
+    if (operation.error) {
+      console.error("Veo Operation Error:", operation.error);
+      const errorMsg = operation.error.message || "Erro desconhecido na operação de vídeo.";
+      throw new Error(`Falha na geração do vídeo: ${errorMsg}`);
+    }
+
     const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
-    if (!videoUri) throw new Error("URI do vídeo não retornada.");
+    if (!videoUri) {
+        console.error("Operation finished but no URI:", operation);
+        throw new Error("A API concluiu o processo mas não retornou o vídeo. Isso pode ocorrer devido a filtros de segurança ou falha interna.");
+    }
 
     // Fetch the actual video blob using the key
     // Note: If using a custom key, we need to append it here as well
@@ -123,8 +133,9 @@ export const generateCinematicVideo = async (
     const blob = await response.blob();
     return URL.createObjectURL(blob);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Video generation error:", error);
-    throw error;
+    // Propagate the specific error message
+    throw new Error(error.message || "Erro na geração do vídeo.");
   }
 };
