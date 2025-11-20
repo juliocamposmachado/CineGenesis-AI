@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera, ArrowRightCircle } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import SafetyModal from './components/SafetyModal';
 import { UploadedImage, AppStatus, VoiceSettings, LibraryItem, ProductionSettings } from './types';
@@ -200,7 +200,7 @@ const App: React.FC = () => {
         setPrompt(""); 
         
         // Auto-save to library with metadata
-        await saveToLibrary(result.blob, "Continuação: " + prompt, 'EXTENSION', duration);
+        await saveToLibrary(result.blob, result.videoAsset, "Continuação: " + prompt, 'EXTENSION', duration);
 
       } else {
         if (!images.A || !images.B) return;
@@ -224,7 +224,7 @@ const App: React.FC = () => {
         setStatus(AppStatus.COMPLETED);
 
         // Auto-save to library with metadata
-        await saveToLibrary(result.blob, prompt, 'SCENE', duration);
+        await saveToLibrary(result.blob, result.videoAsset, prompt, 'SCENE', duration);
       }
 
     } catch (err: any) {
@@ -234,7 +234,7 @@ const App: React.FC = () => {
     }
   };
 
-  const saveToLibrary = async (blob: Blob, savedPrompt: string, type: 'SCENE' | 'EXTENSION', duration: string) => {
+  const saveToLibrary = async (blob: Blob, videoAsset: any, savedPrompt: string, type: 'SCENE' | 'EXTENSION', duration: string) => {
     const usedImages = [];
     if (images.A) usedImages.push(`${images.A.label}: ${images.A.file.name}`);
     if (images.B) usedImages.push(`${images.B.label}: ${images.B.file.name}`);
@@ -244,6 +244,7 @@ const App: React.FC = () => {
       timestamp: Date.now(),
       prompt: savedPrompt,
       videoBlob: blob,
+      videoAsset: videoAsset, // Saving the asset specifically for future extensions
       videoUrl: '', // Placeholder
       type,
       // Detailed Metadata
@@ -267,6 +268,33 @@ const App: React.FC = () => {
       await deleteVideoFromDB(id);
       await loadLibrary();
     }
+  };
+
+  const handleContinueFromLibrary = (item: LibraryItem) => {
+    if (!item.videoAsset) {
+      alert("Erro: Este item não possui dados compatíveis para continuação (ativo expirado ou inválido).");
+      return;
+    }
+
+    // 1. Restore Settings
+    setVoiceSettings(item.voiceSettings);
+    setProductionSettings(item.productionSettings);
+
+    // 2. Set Video Context for Extension
+    setVideoUrl(item.videoUrl);
+    setCurrentBlob(item.videoBlob);
+    setLastVideoAsset(item.videoAsset);
+
+    // 3. Set Mode
+    setIsExtensionMode(true);
+    setPrompt(""); // Clear prompt so user can type the next action
+    setErrorMsg(null);
+
+    // 4. Switch Tab
+    setActiveTab('CREATE');
+    
+    // Scroll to top to see preview
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleEnterExtensionMode = () => {
@@ -476,6 +504,12 @@ const App: React.FC = () => {
 
                       {/* Footer Actions */}
                       <div className="mt-auto flex items-center gap-3 pt-3 border-t border-zinc-800">
+                        <button 
+                          onClick={() => handleContinueFromLibrary(item)}
+                          className="flex-1 flex items-center justify-center gap-2 bg-amber-700 hover:bg-amber-600 text-white py-2 rounded text-xs font-bold transition-colors shadow-lg shadow-amber-900/20"
+                        >
+                          <ArrowRightCircle size={14} /> Continuar Cena
+                        </button>
                         <a 
                           href={item.videoUrl} 
                           download={`juliette_psicose_${item.id}.mp4`}

@@ -39,6 +39,7 @@ export interface LibraryItem {
   timestamp: number; // Data e Hora
   prompt: string; // Texto inserido
   videoBlob: Blob; // Arquivo de vídeo
+  videoAsset: any; // Objeto técnico da IA necessário para extensão (Novo)
   videoUrl: string; // URL para display
   type: 'SCENE' | 'EXTENSION';
   
