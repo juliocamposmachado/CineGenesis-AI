@@ -556,6 +556,7 @@ const App: React.FC = () => {
               <div className="h-[80vh]">
                  <VideoEditor 
                     initialClips={editorClips}
+                    library={library}
                     onSaveToLibrary={(blob, duration) => saveToLibrary(blob, null, "Edição de Vídeo Customizada", 'EDIT', duration.toFixed(2) + 's')}
                  />
               </div>

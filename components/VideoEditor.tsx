@@ -1,13 +1,14 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Play, Pause, Download, Scissors, Plus, Trash2, Layers, Music, Film, Save, Wand2 } from 'lucide-react';
+import { Play, Pause, Download, Scissors, Plus, Trash2, Layers, Music, Film, Save, Wand2, Library, X } from 'lucide-react';
 import { TimelineClip, LibraryItem } from '../types';
 
 interface VideoEditorProps {
   initialClips?: TimelineClip[];
+  library?: LibraryItem[]; // Added library prop
   onSaveToLibrary: (blob: Blob, duration: number) => void;
 }
 
-const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], onSaveToLibrary }) => {
+const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = [], onSaveToLibrary }) => {
   // State
   const [clips, setClips] = useState<TimelineClip[]>(initialClips);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -15,6 +16,7 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], onSaveToLi
   const [totalDuration, setTotalDuration] = useState(10); // Default 10s
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [showLibraryModal, setShowLibraryModal] = useState(false);
 
   // Refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -204,9 +206,63 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], onSaveToLi
     }
   };
 
+  const handleImportFromLibrary = (item: LibraryItem) => {
+    const newClip: TimelineClip = {
+      id: Date.now().toString(),
+      type: 'VIDEO',
+      src: item.videoUrl,
+      name: item.prompt.slice(0, 20) + "...",
+      startOffset: currentTime,
+      duration: 5, // Safety default
+      trimStart: 0,
+      volume: 1,
+      layer: clips.length + 1,
+      opacity: 1,
+      transitionIn: 'NONE'
+    };
+    setClips([...clips, newClip]);
+    setShowLibraryModal(false);
+  };
+
   return (
-    <div className="flex flex-col h-full gap-4">
+    <div className="flex flex-col h-full gap-4 relative">
       
+      {/* --- LIBRARY MODAL --- */}
+      {showLibraryModal && (
+        <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-8">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-4xl h-[80%] flex flex-col shadow-2xl">
+             <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                <h3 className="text-lg font-cinema text-white flex items-center gap-2">
+                   <Library size={20} className="text-amber-500" /> Importar da Biblioteca
+                </h3>
+                <button onClick={() => setShowLibraryModal(false)} className="text-zinc-400 hover:text-white">
+                   <X size={24} />
+                </button>
+             </div>
+             <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {library.length === 0 ? (
+                   <p className="col-span-full text-center text-zinc-500 py-10">Nenhum vídeo na biblioteca.</p>
+                ) : (
+                   library.map(item => (
+                      <div key={item.id} onClick={() => handleImportFromLibrary(item)} className="group cursor-pointer bg-zinc-950 border border-zinc-800 hover:border-amber-500 rounded-lg overflow-hidden transition-all">
+                         <div className="aspect-video bg-black relative">
+                            <video src={item.videoUrl} className="w-full h-full object-cover opacity-80 group-hover:opacity-100" />
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-opacity">
+                               <Plus size={32} className="text-amber-500" />
+                            </div>
+                         </div>
+                         <div className="p-2">
+                            <p className="text-xs text-white truncate font-medium">{item.prompt}</p>
+                            <p className="text-[10px] text-zinc-500">{new Date(item.timestamp).toLocaleDateString()}</p>
+                         </div>
+                      </div>
+                   ))
+                )}
+             </div>
+          </div>
+        </div>
+      )}
+
       {/* --- VIEWER --- */}
       <div className="flex-1 bg-black rounded-xl border border-zinc-800 relative flex items-center justify-center overflow-hidden">
         <canvas 
@@ -237,12 +293,15 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], onSaveToLi
         </div>
 
         <div className="flex items-center gap-2">
-           <label className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded cursor-pointer text-zinc-300 hover:text-white transition-colors" title="Adicionar Mídia">
+           <button onClick={() => setShowLibraryModal(true)} className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded flex items-center gap-2 text-xs font-bold border border-zinc-700">
+              <Library size={16} /> Biblioteca
+           </button>
+           <label className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded cursor-pointer text-zinc-300 hover:text-white transition-colors border border-zinc-700" title="Adicionar Arquivo Local">
               <Plus size={20} />
               <input type="file" className="hidden" accept="video/*,image/*,audio/*" onChange={handleFileUpload} />
            </label>
-           <button onClick={handleExport} disabled={exporting} className="px-4 py-2 bg-zinc-200 hover:bg-white text-black font-bold rounded flex items-center gap-2">
-              <Download size={18} /> Exportar Vídeo
+           <button onClick={handleExport} disabled={exporting} className="px-4 py-2 bg-zinc-200 hover:bg-white text-black font-bold rounded flex items-center gap-2 text-xs">
+              <Download size={16} /> Exportar
            </button>
         </div>
       </div>
