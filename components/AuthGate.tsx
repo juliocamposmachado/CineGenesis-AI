@@ -187,21 +187,21 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
 
       <div className="relative z-10 w-full max-w-6xl bg-zinc-950 rounded-3xl shadow-2xl border border-zinc-800 overflow-hidden flex flex-col md:flex-row h-auto md:h-[85vh]">
         
-        {/* Lado Esquerdo: Valor & Branding (EXPANDIDO) */}
-        <div className="md:w-6/12 p-8 md:p-10 bg-gradient-to-b from-zinc-900 to-black border-b md:border-b-0 md:border-r border-zinc-800 flex flex-col relative overflow-hidden overflow-y-auto custom-scrollbar">
-          {/* Background Glow */}
-          <div className="absolute top-0 left-0 w-full h-full bg-amber-500/5 pointer-events-none"></div>
+        {/* Lado Esquerdo: Valor & Branding (EXPANDIDO & SUAVIZADO) */}
+        <div className="md:w-6/12 p-8 md:p-10 bg-zinc-950 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-zinc-800/20 via-zinc-950 to-zinc-950 border-b md:border-b-0 md:border-r border-zinc-900/50 flex flex-col relative overflow-hidden overflow-y-auto custom-scrollbar">
+          {/* Background Glow Suavizado - Radial e Sutil */}
+          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_left,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent pointer-events-none opacity-60"></div>
           
           <div className="relative z-10">
             <div className="flex items-center gap-2 text-amber-500 mb-6">
-               <div className="p-2 bg-amber-500/10 rounded-lg">
+               <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20">
                  <ShieldCheck size={24} />
                </div>
                <span className="font-cinema text-lg font-bold tracking-widest text-white">CINEGENESIS AI</span>
             </div>
             
             <div className="mb-6">
-              <span className="inline-block px-3 py-1 bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-full mb-4 animate-pulse">
+              <span className="inline-block px-3 py-1 bg-red-600/90 text-white text-[10px] font-bold uppercase tracking-wider rounded-full mb-4 animate-pulse shadow-lg shadow-red-900/20">
                 🔥 Promoção Vitalícia
               </span>
               <h1 className="text-3xl md:text-4xl font-bold text-white leading-tight mb-2">
@@ -215,7 +215,7 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
                 href="https://www.facebook.com/juliocamposmachado/posts/pfbid0236teP9jf3Ljs48fqj2Kizr9Zr2EaaftginAJL4qjbsWdFAHmJ9aErQ8Zont8mKdcl" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 hover:underline transition-colors mb-6 p-2 bg-blue-900/20 rounded-lg border border-blue-900/30 w-full justify-center"
+                className="inline-flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 hover:underline transition-colors mb-6 p-2 bg-blue-950/30 rounded-lg border border-blue-900/30 w-full justify-center hover:bg-blue-900/20"
               >
                  <Facebook size={14} />
                  Ver exemplos reais criados por Julio Campos Machado
@@ -225,10 +225,10 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
 
             {/* Grid de Recursos Detalhado */}
             <div className="grid grid-cols-1 gap-4 mb-8">
-              <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider border-b border-zinc-800 pb-2">Recursos Inclusos na Plataforma</h3>
+              <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider border-b border-zinc-800/50 pb-2">Recursos Inclusos na Plataforma</h3>
               
-              <div className="flex items-start gap-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-amber-900/50 transition-colors">
-                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-amber-500 shrink-0">
+              <div className="flex items-start gap-3 p-3 bg-zinc-900/30 rounded-xl border border-zinc-800/50 hover:border-amber-900/30 transition-colors hover:bg-zinc-900/50">
+                <div className="w-10 h-10 rounded-full bg-zinc-800/80 flex items-center justify-center text-amber-500 shrink-0 border border-zinc-700/50">
                   <Users size={20} />
                 </div>
                 <div>
@@ -237,8 +237,8 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-amber-900/50 transition-colors">
-                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-amber-500 shrink-0">
+              <div className="flex items-start gap-3 p-3 bg-zinc-900/30 rounded-xl border border-zinc-800/50 hover:border-amber-900/30 transition-colors hover:bg-zinc-900/50">
+                <div className="w-10 h-10 rounded-full bg-zinc-800/80 flex items-center justify-center text-amber-500 shrink-0 border border-zinc-700/50">
                   <Mic2 size={20} />
                 </div>
                 <div>
@@ -247,8 +247,8 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-amber-900/50 transition-colors">
-                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-amber-500 shrink-0">
+              <div className="flex items-start gap-3 p-3 bg-zinc-900/30 rounded-xl border border-zinc-800/50 hover:border-amber-900/30 transition-colors hover:bg-zinc-900/50">
+                <div className="w-10 h-10 rounded-full bg-zinc-800/80 flex items-center justify-center text-amber-500 shrink-0 border border-zinc-700/50">
                   <Palette size={20} />
                 </div>
                 <div>
@@ -257,8 +257,8 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-amber-900/50 transition-colors">
-                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-amber-500 shrink-0">
+              <div className="flex items-start gap-3 p-3 bg-zinc-900/30 rounded-xl border border-zinc-800/50 hover:border-amber-900/30 transition-colors hover:bg-zinc-900/50">
+                <div className="w-10 h-10 rounded-full bg-zinc-800/80 flex items-center justify-center text-amber-500 shrink-0 border border-zinc-700/50">
                   <Wand2 size={20} />
                 </div>
                 <div>
@@ -270,7 +270,7 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
 
           </div>
           
-          <div className="mt-auto pt-4 border-t border-zinc-800">
+          <div className="mt-auto pt-4 border-t border-zinc-800/50">
              <div className="flex items-center gap-2 text-zinc-500 text-xs">
                 <Clock size={14} />
                 Oferta expira em: <span className="text-red-500 font-mono font-bold">{timeLeft.m}:{timeLeft.s < 10 ? `0${timeLeft.s}` : timeLeft.s}</span>
@@ -393,7 +393,7 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
               <button onClick={() => setStep('EMAIL')} className="text-xs text-zinc-500 hover:text-white mb-4 flex items-center gap-1">← Trocar conta</button>
               
               <div className="bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/30 rounded-2xl p-6 mb-6 relative overflow-hidden">
-                 <div className="absolute -right-4 -top-4 bg-amber-500 text-black text-[10px] font-bold px-6 py-2 rotate-12">99% OFF</div>
+                 <div className="absolute -right-4 -top-4 bg-amber-500 text-black text-[10px] font-bold px-6 py-2 rotate-12 shadow-lg">99% OFF</div>
                  
                  <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-2">Oferta Especial</h3>
                  <div className="flex items-end gap-3 mb-4">
