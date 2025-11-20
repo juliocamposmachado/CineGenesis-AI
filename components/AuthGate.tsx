@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, CreditCard, CheckCircle, Loader2, User, ShieldCheck, Zap, Clock, AlertTriangle, Key, ExternalLink } from 'lucide-react';
+import { Lock, CreditCard, CheckCircle, Loader2, User, ShieldCheck, Zap, Clock, AlertTriangle, Key, ExternalLink, Facebook } from 'lucide-react';
 import { User as UserType } from '../types';
 
 interface AuthGateProps {
@@ -206,6 +206,18 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
               <p className="text-zinc-400 text-sm leading-relaxed">
                 A ferramenta definitiva para visualização cinematográfica da série <span className="text-amber-500 font-cinema">Juliette Psicose</span>.
               </p>
+              
+              {/* Link solicitado adicionado aqui */}
+              <a 
+                href="https://www.facebook.com/juliocamposmachado/posts/pfbid0236teP9jf3Ljs48fqj2Kizr9Zr2EaaftginAJL4qjbsWdFAHmJ9aErQ8Zont8mKdcl" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 hover:underline mt-3 transition-colors"
+              >
+                 <Facebook size={14} />
+                 Veja como Julio Campos Machado usou a ferramenta
+                 <ExternalLink size={10} />
+              </a>
             </div>
 
             <div className="space-y-4">
