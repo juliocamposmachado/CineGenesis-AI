@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, CreditCard, CheckCircle, Loader2, User, ShieldCheck, Zap, Clock, AlertTriangle, Key, ExternalLink, Facebook } from 'lucide-react';
+import { Lock, CreditCard, CheckCircle, Loader2, User, ShieldCheck, Zap, Clock, AlertTriangle, Key, ExternalLink, Facebook, Users, Mic2, Clapperboard, Sparkles, Palette, Wand2 } from 'lucide-react';
 import { User as UserType } from '../types';
 
 interface AuthGateProps {
@@ -185,68 +185,92 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
     <div className="fixed inset-0 z-[200] bg-black flex items-center justify-center p-4 bg-[url('https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center">
       <div className="absolute inset-0 bg-black/90 backdrop-blur-md"></div>
 
-      <div className="relative z-10 w-full max-w-5xl bg-zinc-950 rounded-3xl shadow-2xl border border-zinc-800 overflow-hidden flex flex-col md:flex-row">
+      <div className="relative z-10 w-full max-w-6xl bg-zinc-950 rounded-3xl shadow-2xl border border-zinc-800 overflow-hidden flex flex-col md:flex-row h-auto md:h-[85vh]">
         
-        {/* Lado Esquerdo: Valor & Branding */}
-        <div className="md:w-5/12 p-8 bg-gradient-to-b from-zinc-900 to-black border-b md:border-b-0 md:border-r border-zinc-800 flex flex-col relative overflow-hidden">
+        {/* Lado Esquerdo: Valor & Branding (EXPANDIDO) */}
+        <div className="md:w-6/12 p-8 md:p-10 bg-gradient-to-b from-zinc-900 to-black border-b md:border-b-0 md:border-r border-zinc-800 flex flex-col relative overflow-hidden overflow-y-auto custom-scrollbar">
           {/* Background Glow */}
           <div className="absolute top-0 left-0 w-full h-full bg-amber-500/5 pointer-events-none"></div>
           
           <div className="relative z-10">
-            <div className="flex items-center gap-2 text-amber-500 mb-8">
+            <div className="flex items-center gap-2 text-amber-500 mb-6">
                <div className="p-2 bg-amber-500/10 rounded-lg">
                  <ShieldCheck size={24} />
                </div>
                <span className="font-cinema text-lg font-bold tracking-widest text-white">CINEGENESIS AI</span>
             </div>
             
-            <div className="mb-8">
+            <div className="mb-6">
               <span className="inline-block px-3 py-1 bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-full mb-4 animate-pulse">
                 🔥 Promoção Vitalícia
               </span>
               <h1 className="text-3xl md:text-4xl font-bold text-white leading-tight mb-2">
                 Crie o impossível.
               </h1>
-              <p className="text-zinc-400 text-sm leading-relaxed">
+              <p className="text-zinc-400 text-sm leading-relaxed mb-4">
                 A ferramenta definitiva para visualização cinematográfica da série <span className="text-amber-500 font-cinema">Juliette Psicose</span>.
               </p>
-              
-              {/* Link solicitado adicionado aqui */}
+
               <a 
                 href="https://www.facebook.com/juliocamposmachado/posts/pfbid0236teP9jf3Ljs48fqj2Kizr9Zr2EaaftginAJL4qjbsWdFAHmJ9aErQ8Zont8mKdcl" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 hover:underline mt-3 transition-colors"
+                className="inline-flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 hover:underline transition-colors mb-6 p-2 bg-blue-900/20 rounded-lg border border-blue-900/30 w-full justify-center"
               >
                  <Facebook size={14} />
-                 Veja como Julio Campos Machado usou a ferramenta
+                 Ver exemplos reais criados por Julio Campos Machado
                  <ExternalLink size={10} />
               </a>
             </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-amber-500">
-                  <CheckCircle size={16} />
+            {/* Grid de Recursos Detalhado */}
+            <div className="grid grid-cols-1 gap-4 mb-8">
+              <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider border-b border-zinc-800 pb-2">Recursos Inclusos na Plataforma</h3>
+              
+              <div className="flex items-start gap-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-amber-900/50 transition-colors">
+                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-amber-500 shrink-0">
+                  <Users size={20} />
                 </div>
                 <div>
-                  <p className="text-white text-sm font-bold">Motor Veo AI 4K</p>
-                  <p className="text-zinc-500 text-xs">Geração de vídeo ilimitada</p>
+                  <p className="text-white text-sm font-bold">Consistência de Personagens</p>
+                  <p className="text-zinc-500 text-xs leading-snug">Carregue fotos de referência e mantenha o mesmo rosto em todas as cenas.</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-amber-500">
-                  <CheckCircle size={16} />
+
+              <div className="flex items-start gap-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-amber-900/50 transition-colors">
+                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-amber-500 shrink-0">
+                  <Mic2 size={20} />
                 </div>
                 <div>
-                  <p className="text-white text-sm font-bold">Consistência Vocal</p>
-                  <p className="text-zinc-500 text-xs">Clonagem de voz e direção de áudio</p>
+                  <p className="text-white text-sm font-bold">Direção Vocal com IA</p>
+                  <p className="text-zinc-500 text-xs leading-snug">Envie áudios de exemplo ou descreva a voz. A IA sincroniza o tom e sotaque.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-amber-900/50 transition-colors">
+                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-amber-500 shrink-0">
+                  <Palette size={20} />
+                </div>
+                <div>
+                  <p className="text-white text-sm font-bold">Atmosfera & Transições</p>
+                  <p className="text-zinc-500 text-xs leading-snug">Controle luz, som ambiente, Fade-In/Out e estilo cinematográfico (Noir, Drama).</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-amber-900/50 transition-colors">
+                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-amber-500 shrink-0">
+                  <Wand2 size={20} />
+                </div>
+                <div>
+                  <p className="text-white text-sm font-bold">Casting Virtual</p>
+                  <p className="text-zinc-500 text-xs leading-snug">Use imagens base para criar protagonistas e antagonistas únicos.</p>
                 </div>
               </div>
             </div>
+
           </div>
           
-          <div className="mt-auto pt-8">
+          <div className="mt-auto pt-4 border-t border-zinc-800">
              <div className="flex items-center gap-2 text-zinc-500 text-xs">
                 <Clock size={14} />
                 Oferta expira em: <span className="text-red-500 font-mono font-bold">{timeLeft.m}:{timeLeft.s < 10 ? `0${timeLeft.s}` : timeLeft.s}</span>
@@ -255,7 +279,7 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
         </div>
 
         {/* Lado Direito: Formulário Dinâmico */}
-        <div className="md:w-7/12 p-8 md:p-12 bg-zinc-950 flex flex-col justify-center relative">
+        <div className="md:w-6/12 p-8 md:p-12 bg-zinc-950 flex flex-col justify-center relative overflow-y-auto">
           
           {step === 'EMAIL' && (
             <div className="animate-in fade-in slide-in-from-right-4">
