@@ -1,195 +1,323 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, CreditCard, CheckCircle, Loader2, User, ShieldCheck } from 'lucide-react';
-import { User as UserType, AuthState } from '../types';
+import { Lock, CreditCard, CheckCircle, Loader2, User, ShieldCheck, Zap, Clock, AlertTriangle } from 'lucide-react';
+import { User as UserType } from '../types';
 
 interface AuthGateProps {
   onLogin: (user: UserType) => void;
 }
 
-// Credenciais Hardcoded (Demo)
+// Credenciais (Produção)
+const MP_ACCESS_TOKEN = 'APP_USR-8847529597252337-112002-b8fc04b196ea64fb73cf0cb2d8ae09db-29008060';
 const ADMIN_EMAILS = ['juliocamposmachado@gmail.com', 'radiotatuapefm@gmail.com'];
 const ADMIN_PASS = 'Julio78451200';
 
 const AuthGate: React.FC<AuthGateProps> = ({ onLogin }) => {
-  const [mode, setMode] = useState<'SUBSCRIBE' | 'LOGIN'>('SUBSCRIBE');
+  const [step, setStep] = useState<'EMAIL' | 'PASSWORD' | 'OFFER'>('EMAIL');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [checkingStatus, setCheckingStatus] = useState(false);
 
-  // Mercado Pago SDK Check
-  const [mpReady, setMpReady] = useState(false);
+  // Efeito visual de cronômetro para a promoção
+  const [timeLeft, setTimeLeft] = useState({ m: 14, s: 59 });
 
   useEffect(() => {
-    // Check if MP script is loaded
-    // @ts-ignore
-    if (window.MercadoPago) {
-      setMpReady(true);
-    }
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev.s === 0) return { m: prev.m - 1, s: 59 };
+        return { ...prev, s: prev.s - 1 };
+      });
+    }, 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Passo 1: Verificar E-mail
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
+    // 1. Fluxo Admin
+    if (ADMIN_EMAILS.includes(email.trim().toLowerCase())) {
+      setLoading(false);
+      setStep('PASSWORD');
+      return;
+    }
+
+    // 2. Fluxo Usuário Comum - Verificar Pagamento no Mercado Pago
+    try {
+      setCheckingStatus(true);
+      
+      // Busca pagamentos aprovados para este e-mail
+      // Nota: Isso pode falhar por CORS se rodado direto no navegador sem proxy.
+      const response = await fetch(`https://api.mercadopago.com/v1/payments/search?payer.email=${email}&status=approved`, {
+        headers: {
+          'Authorization': `Bearer ${MP_ACCESS_TOKEN}`
+        }
+      });
+
+      if (!response.ok) {
+         // Se falhar (CORS ou Auth), assumimos que não tem pagamento para mostrar a oferta (Fallback seguro)
+         console.warn("Falha ao verificar API MP (Provável CORS). Mostrando oferta.");
+         setStep('OFFER');
+         setLoading(false);
+         return;
+      }
+
+      const data = await response.json();
+      const hasPayment = data.results && data.results.length > 0;
+
+      if (hasPayment) {
+        onLogin({
+          email,
+          isAdmin: false,
+          hasActiveSubscription: true
+        });
+      } else {
+        setStep('OFFER'); // Não pagou, mostra promoção
+      }
+
+    } catch (err) {
+      console.error("Erro MP:", err);
+      // Em caso de erro de rede, mostramos a oferta para garantir conversão
+      setStep('OFFER');
+    } finally {
+      setLoading(false);
+      setCheckingStatus(false);
+    }
+  };
+
+  // Passo 2: Login Admin
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
     setTimeout(() => {
-      if (ADMIN_EMAILS.includes(email) && password === ADMIN_PASS) {
+      if (password === ADMIN_PASS) {
         onLogin({
           email,
           isAdmin: true,
           hasActiveSubscription: true
         });
       } else {
-        setError('Credenciais inválidas. Acesso negado.');
+        setError('Senha administrativa incorreta.');
         setLoading(false);
       }
-    }, 1000);
+    }, 800);
   };
 
-  const handleSubscribe = () => {
+  // Passo 3: Checkout da Oferta
+  const handleCheckout = async () => {
     setLoading(true);
-    // Simulação do Flow de Pagamento do Mercado Pago
-    // Em produção, isso redirecionaria para o Checkout Pro ou abriria o Brick
-    setTimeout(() => {
-       alert("Simulação: Pagamento via Mercado Pago Aprovado!");
-       onLogin({
-         email: 'assinante@cliente.com',
-         isAdmin: false,
-         hasActiveSubscription: true
-       });
-    }, 2000);
+    try {
+      // Criar Preferência de Pagamento
+      const preferenceData = {
+        items: [
+          {
+            title: 'CineGenesis AI - Acesso Vitalício (Promoção)',
+            description: 'Acesso completo à ferramenta de criação de vídeo.',
+            quantity: 1,
+            currency_id: 'BRL',
+            unit_price: 2.50
+          }
+        ],
+        payer: {
+          email: email
+        },
+        back_urls: {
+          success: window.location.href,
+          failure: window.location.href,
+          pending: window.location.href
+        },
+        auto_return: "approved"
+      };
+
+      const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(preferenceData)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Redirecionar para o Sandbox ou Produção (init_point)
+        window.location.href = data.init_point; 
+      } else {
+        throw new Error("Falha ao criar link de pagamento");
+      }
+
+    } catch (err) {
+      console.error(err);
+      setError('Erro ao conectar com Mercado Pago (Bloqueio de Navegador/CORS). Tente novamente mais tarde.');
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black flex items-center justify-center p-4 bg-[url('https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center">
-      <div className="absolute inset-0 bg-black/90 backdrop-blur-sm"></div>
+    <div className="fixed inset-0 z-[200] bg-black flex items-center justify-center p-4 bg-[url('https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center">
+      <div className="absolute inset-0 bg-black/90 backdrop-blur-md"></div>
 
-      <div className="relative z-10 w-full max-w-4xl bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-800 overflow-hidden flex flex-col md:flex-row">
+      <div className="relative z-10 w-full max-w-5xl bg-zinc-950 rounded-3xl shadow-2xl border border-zinc-800 overflow-hidden flex flex-col md:flex-row">
         
-        {/* Left Side: Branding & Value Prop */}
-        <div className="md:w-1/2 p-8 bg-gradient-to-br from-zinc-900 to-black border-b md:border-b-0 md:border-r border-zinc-800 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-amber-500 mb-6">
-               <ShieldCheck size={32} />
-               <span className="font-cinema text-xl font-bold tracking-widest">CINEGENESIS AI</span>
+        {/* Lado Esquerdo: Valor & Branding */}
+        <div className="md:w-5/12 p-8 bg-gradient-to-b from-zinc-900 to-black border-b md:border-b-0 md:border-r border-zinc-800 flex flex-col relative overflow-hidden">
+          {/* Background Glow */}
+          <div className="absolute top-0 left-0 w-full h-full bg-amber-500/5 pointer-events-none"></div>
+          
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 text-amber-500 mb-8">
+               <div className="p-2 bg-amber-500/10 rounded-lg">
+                 <ShieldCheck size={24} />
+               </div>
+               <span className="font-cinema text-lg font-bold tracking-widest text-white">CINEGENESIS AI</span>
             </div>
             
-            <h1 className="text-3xl font-bold text-white mb-4">
-              Dê vida às suas histórias.
-            </h1>
-            <p className="text-zinc-400 text-sm leading-relaxed mb-6">
-              Acesse a ferramenta profissional de visualização cinematográfica para a série 
-              <span className="text-amber-500 font-cinema mx-1">Juliette Psicose</span>. 
-              Crie cenas, edite vídeos e extraia arquétipos visuais com IA.
-            </p>
+            <div className="mb-8">
+              <span className="inline-block px-3 py-1 bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-full mb-4 animate-pulse">
+                🔥 Promoção Vitalícia
+              </span>
+              <h1 className="text-3xl md:text-4xl font-bold text-white leading-tight mb-2">
+                Crie o impossível.
+              </h1>
+              <p className="text-zinc-400 text-sm leading-relaxed">
+                A ferramenta definitiva para visualização cinematográfica da série <span className="text-amber-500 font-cinema">Juliette Psicose</span>.
+              </p>
+            </div>
 
-            <ul className="space-y-3">
-              <li className="flex items-center gap-3 text-sm text-zinc-300">
-                <CheckCircle size={16} className="text-amber-500" />
-                Geração de Vídeo Ilimitada (Veo)
-              </li>
-              <li className="flex items-center gap-3 text-sm text-zinc-300">
-                <CheckCircle size={16} className="text-amber-500" />
-                Consistência de Personagem & Voz
-              </li>
-              <li className="flex items-center gap-3 text-sm text-zinc-300">
-                <CheckCircle size={16} className="text-amber-500" />
-                Editor de Timeline (Beta)
-              </li>
-            </ul>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-amber-500">
+                  <CheckCircle size={16} />
+                </div>
+                <div>
+                  <p className="text-white text-sm font-bold">Motor Veo AI 4K</p>
+                  <p className="text-zinc-500 text-xs">Geração de vídeo ilimitada</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-amber-500">
+                  <CheckCircle size={16} />
+                </div>
+                <div>
+                  <p className="text-white text-sm font-bold">Consistência Vocal</p>
+                  <p className="text-zinc-500 text-xs">Clonagem de voz e direção de áudio</p>
+                </div>
+              </div>
+            </div>
           </div>
           
-          <div className="mt-8 pt-6 border-t border-zinc-800 text-[10px] text-zinc-600">
-            Desenvolvido por Julio Campos Machado • Like Look Solutions
+          <div className="mt-auto pt-8">
+             <div className="flex items-center gap-2 text-zinc-500 text-xs">
+                <Clock size={14} />
+                Oferta expira em: <span className="text-red-500 font-mono font-bold">{timeLeft.m}:{timeLeft.s < 10 ? `0${timeLeft.s}` : timeLeft.s}</span>
+             </div>
           </div>
         </div>
 
-        {/* Right Side: Auth & Payment */}
-        <div className="md:w-1/2 p-8 bg-zinc-950 flex flex-col justify-center">
+        {/* Lado Direito: Formulário Dinâmico */}
+        <div className="md:w-7/12 p-8 md:p-12 bg-zinc-950 flex flex-col justify-center relative">
           
-          {/* Toggle Tabs */}
-          <div className="flex p-1 bg-zinc-900 rounded-lg mb-8">
-             <button 
-               onClick={() => setMode('SUBSCRIBE')}
-               className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded transition-colors ${mode === 'SUBSCRIBE' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
-             >
-               Assinar
-             </button>
-             <button 
-               onClick={() => setMode('LOGIN')}
-               className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded transition-colors ${mode === 'LOGIN' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
-             >
-               Entrar
-             </button>
-          </div>
-
-          {mode === 'SUBSCRIBE' ? (
+          {step === 'EMAIL' && (
             <div className="animate-in fade-in slide-in-from-right-4">
-               <div className="text-center mb-8">
-                  <p className="text-zinc-400 text-sm uppercase tracking-wide mb-2">Plano Mensal Recorrente</p>
-                  <div className="flex items-end justify-center gap-1">
-                     <span className="text-sm text-zinc-500 font-bold mb-1">R$</span>
-                     <span className="text-5xl font-bold text-white tracking-tighter">2,50</span>
-                     <span className="text-zinc-500 font-medium mb-1">/mês</span>
-                  </div>
-               </div>
-
-               <button 
-                 onClick={handleSubscribe}
-                 disabled={loading}
-                 className="w-full py-4 bg-[#009EE3] hover:bg-[#008ED0] text-white font-bold rounded-xl transition-all transform hover:scale-[1.02] shadow-lg shadow-blue-900/20 flex items-center justify-center gap-3 group"
-               >
-                 {loading ? <Loader2 className="animate-spin" /> : <CreditCard size={20} />}
-                 <span>Assinar com Mercado Pago</span>
-               </button>
-               
-               <p className="text-center text-[10px] text-zinc-600 mt-4">
-                 Pagamento processado de forma segura. Cancele quando quiser.
-               </p>
-            </div>
-          ) : (
-            <form onSubmit={handleLogin} className="space-y-4 animate-in fade-in slide-in-from-left-4">
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1 ml-1">Email</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 text-zinc-600" size={18} />
-                  <input 
-                    type="email" 
-                    required
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg py-3 pl-10 pr-4 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all"
-                    placeholder="admin@cinegenesis.com"
-                  />
-                </div>
-              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Identificação</h2>
+              <p className="text-zinc-400 text-sm mb-8">Digite seu e-mail para acessar ou verificar sua assinatura.</p>
               
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1 ml-1">Senha</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 text-zinc-600" size={18} />
-                  <input 
-                    type="password" 
-                    required
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg py-3 pl-10 pr-4 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all"
-                    placeholder="••••••••"
-                  />
+              <form onSubmit={handleEmailSubmit} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase ml-1">E-mail Profissional</label>
+                  <div className="relative mt-1">
+                    <User className="absolute left-3 top-3.5 text-zinc-600" size={18} />
+                    <input 
+                      type="email" 
+                      required
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3.5 pl-10 pr-4 text-white focus:border-amber-600 focus:ring-1 focus:ring-amber-600 outline-none transition-all placeholder-zinc-700"
+                      placeholder="seu@email.com"
+                    />
+                  </div>
                 </div>
+                <button 
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-4 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl transition-all flex items-center justify-center gap-2 mt-4 shadow-lg shadow-white/10"
+                >
+                  {loading ? <Loader2 className="animate-spin" /> : 'Continuar'}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {step === 'PASSWORD' && (
+            <div className="animate-in fade-in slide-in-from-right-4">
+              <button onClick={() => setStep('EMAIL')} className="text-xs text-zinc-500 hover:text-white mb-6 flex items-center gap-1">← Voltar</button>
+              <h2 className="text-2xl font-bold text-white mb-2">Acesso Administrativo</h2>
+              <p className="text-zinc-400 text-sm mb-8">Olá, <strong>{email}</strong>. Digite sua credencial.</p>
+              
+              <form onSubmit={handleAdminLogin} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase ml-1">Senha Mestra</label>
+                  <div className="relative mt-1">
+                    <Lock className="absolute left-3 top-3.5 text-zinc-600" size={18} />
+                    <input 
+                      type="password" 
+                      required
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3.5 pl-10 pr-4 text-white focus:border-amber-600 focus:ring-1 focus:ring-amber-600 outline-none transition-all"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
+                {error && <p className="text-xs text-red-400 bg-red-950/30 p-3 rounded border border-red-900/30 flex items-center gap-2"><AlertTriangle size={12}/> {error}</p>}
+                <button 
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 mt-4 shadow-lg shadow-amber-900/20"
+                >
+                  {loading ? <Loader2 className="animate-spin" /> : 'Acessar Painel'}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {step === 'OFFER' && (
+            <div className="animate-in fade-in zoom-in-95">
+              <button onClick={() => setStep('EMAIL')} className="text-xs text-zinc-500 hover:text-white mb-4 flex items-center gap-1">← Trocar conta</button>
+              
+              <div className="bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/30 rounded-2xl p-6 mb-6 relative overflow-hidden">
+                 <div className="absolute -right-4 -top-4 bg-amber-500 text-black text-[10px] font-bold px-6 py-2 rotate-12">99% OFF</div>
+                 
+                 <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-2">Oferta Especial</h3>
+                 <div className="flex items-end gap-3 mb-4">
+                    <div className="text-zinc-500 text-lg line-through font-medium decoration-red-500 decoration-2">R$ 250,00</div>
+                    <div className="text-4xl md:text-5xl font-bold text-white tracking-tighter">R$ 2,50</div>
+                 </div>
+                 <p className="text-amber-200/80 text-sm leading-snug">
+                   Acesso <strong>VITALÍCIO</strong> e ilimitado a todas as ferramentas de IA do CineGenesis. 
+                   Sem mensalidades. Pagamento único.
+                 </p>
               </div>
 
-              {error && <p className="text-xs text-red-400 bg-red-900/20 p-2 rounded border border-red-900/50">{error}</p>}
+              {error && <p className="text-xs text-red-400 mb-4">{error}</p>}
 
               <button 
-                type="submit"
+                onClick={handleCheckout}
                 disabled={loading}
-                className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+                className="w-full py-4 bg-[#009EE3] hover:bg-[#008ED0] text-white font-bold rounded-xl transition-all transform hover:scale-[1.02] shadow-xl shadow-blue-900/20 flex items-center justify-center gap-3 group"
               >
-                {loading ? <Loader2 className="animate-spin" size={18} /> : 'Acessar Sistema'}
+                {loading ? <Loader2 className="animate-spin" /> : <CreditCard size={20} />}
+                <span>GARANTIR ACESSO AGORA</span>
               </button>
-            </form>
+              
+              <div className="flex items-center justify-center gap-4 mt-6 opacity-60 grayscale">
+                 <span className="text-[10px] text-zinc-500">Processado por</span>
+                 <img src="https://logospng.org/download/mercado-pago/logo-mercado-pago-icone-1024.png" alt="Mercado Pago" className="h-5" />
+              </div>
+            </div>
           )}
 
         </div>
