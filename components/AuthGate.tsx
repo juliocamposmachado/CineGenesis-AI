@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, CreditCard, CheckCircle, Loader2, User, ShieldCheck, Zap, Clock, AlertTriangle } from 'lucide-react';
+import { Lock, CreditCard, CheckCircle, Loader2, User, ShieldCheck, Zap, Clock, AlertTriangle, Key, ExternalLink } from 'lucide-react';
 import { User as UserType } from '../types';
 
 interface AuthGateProps {
   onLogin: (user: UserType) => void;
+  onSetApiKey?: (key: string) => void;
 }
 
 // Credenciais (Produção)
@@ -11,13 +12,14 @@ const MP_ACCESS_TOKEN = 'APP_USR-8847529597252337-112002-b8fc04b196ea64fb73cf0cb
 const ADMIN_EMAILS = ['juliocamposmachado@gmail.com', 'radiotatuapefm@gmail.com'];
 const ADMIN_PASS = 'Julio78451200';
 
-const AuthGate: React.FC<AuthGateProps> = ({ onLogin }) => {
-  const [step, setStep] = useState<'EMAIL' | 'PASSWORD' | 'OFFER'>('EMAIL');
+const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
+  const [step, setStep] = useState<'EMAIL' | 'PASSWORD' | 'OFFER' | 'TEST_KEY'>('EMAIL');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [testApiKey, setTestApiKey] = useState('');
 
   // Efeito visual de cronômetro para a promoção
   const [timeLeft, setTimeLeft] = useState({ m: 14, s: 59 });
@@ -156,6 +158,25 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin }) => {
     }
   };
 
+  // Passo 4: Login com Chave Própria (Test Mode)
+  const handleTestLogin = (e: React.FormEvent) => {
+     e.preventDefault();
+     if (!testApiKey.trim()) return;
+     
+     // Save Key
+     localStorage.setItem('gemini_api_key', testApiKey);
+     
+     // Propagate Key
+     if(onSetApiKey) onSetApiKey(testApiKey);
+
+     // Login as Guest
+     onLogin({
+        email: 'convidado@cinegenesis.test',
+        isAdmin: false,
+        hasActiveSubscription: true
+     });
+  };
+
   return (
     <div className="fixed inset-0 z-[200] bg-black flex items-center justify-center p-4 bg-[url('https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center">
       <div className="absolute inset-0 bg-black/90 backdrop-blur-md"></div>
@@ -248,7 +269,50 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin }) => {
                   {loading ? <Loader2 className="animate-spin" /> : 'Continuar'}
                 </button>
               </form>
+              
+              <div className="mt-6 pt-6 border-t border-zinc-900 flex justify-center">
+                  <button onClick={() => setStep('TEST_KEY')} className="text-zinc-500 hover:text-amber-500 text-xs flex items-center gap-2 transition-colors">
+                     <Key size={12} /> Testar CineGenesis AI com Chave Própria
+                  </button>
+              </div>
             </div>
+          )}
+
+          {step === 'TEST_KEY' && (
+             <div className="animate-in fade-in slide-in-from-right-4">
+                <button onClick={() => setStep('EMAIL')} className="text-xs text-zinc-500 hover:text-white mb-6 flex items-center gap-1">← Voltar</button>
+                <h2 className="text-2xl font-bold text-white mb-2">Modo de Teste (BYOK)</h2>
+                <p className="text-zinc-400 text-sm mb-6">
+                   Insira sua própria <span className="text-white font-bold">Gemini API Key</span> para testar a ferramenta gratuitamente usando sua cota pessoal.
+                   <br/>Este teste funciona até sua cota da API esgotar.
+                </p>
+                
+                <form onSubmit={handleTestLogin} className="space-y-4">
+                   <div>
+                      <label className="text-xs font-bold text-zinc-500 uppercase ml-1">Sua Chave de API (Google AI Studio)</label>
+                      <div className="relative mt-1">
+                         <Key className="absolute left-3 top-3.5 text-zinc-600" size={18} />
+                         <input 
+                            type="password" 
+                            required
+                            value={testApiKey}
+                            onChange={e => setTestApiKey(e.target.value)}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3.5 pl-10 pr-4 text-white focus:border-amber-600 focus:ring-1 focus:ring-amber-600 outline-none transition-all placeholder-zinc-700"
+                            placeholder="AIzaSy..."
+                         />
+                      </div>
+                      <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] text-amber-600 mt-2 hover:underline">
+                         Obter chave no Google AI Studio <ExternalLink size={10} />
+                      </a>
+                   </div>
+                   <button 
+                      type="submit"
+                      className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 mt-4 shadow-lg shadow-amber-900/20"
+                   >
+                      Acessar Studio (Modo Teste)
+                   </button>
+                </form>
+             </div>
           )}
 
           {step === 'PASSWORD' && (

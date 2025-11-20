@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera, ArrowRightCircle, Scissors, Layers, Share2 } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera, ArrowRightCircle, Scissors, Layers, Share2, Video } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import AudioUploader from './components/AudioUploader';
 import VideoEditor from './components/VideoEditor';
@@ -68,7 +68,7 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
-  const [activeTab, setActiveTab] = useState<'CREATE' | 'LIBRARY' | 'EDITOR'>('CREATE');
+  const [activeTab, setActiveTab] = useState<'CREATE' | 'LIBRARY' | 'EDITOR' | 'GALLERY'>('CREATE');
   
   // Generation State
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
@@ -401,6 +401,13 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUseTemplate = (templatePrompt: string) => {
+    setPrompt(templatePrompt);
+    setActiveTab('CREATE');
+    setIsExtensionMode(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const loadPilotScript = () => {
     const script = `CENA 1 - INT. CORREDOR - NOITE\n\nA câmera inicia com um leve CLOSE-UP nos olhos da MULHER (Juliette) enquanto ela respira fundo, carregando dúvida e intensidade.\n\nMULHER: "Às vezes sinto que o meu próprio silêncio pesa mais do que as palavras que não digo."\n\nHOMEM (Guia): "O silêncio só pesa quando tentamos ignorar o que ele tenta revelar."\n\nA câmera faz um TRAVELLING lateral lento, ampliando a profundidade emocional.\n\nMULHER: "E se eu não estiver pronta para ouvir?"\n\nHOMEM: "Ninguém está. A prontidão nasce quando damos o primeiro passo."\n\nOs dois personagens dão alguns passos no corredor iluminado por luz difusa.`;
     setPrompt(script);
@@ -420,7 +427,7 @@ const App: React.FC = () => {
 
   // 1. Render AUTH GATE first if not authenticated
   if (!isAuthenticated) {
-    return <AuthGate onLogin={handleLoginSuccess} />;
+    return <AuthGate onLogin={handleLoginSuccess} onSetApiKey={setUserApiKey} />;
   }
 
   // 2. Render SPLASH SCREEN briefly after auth
@@ -486,24 +493,30 @@ const App: React.FC = () => {
             </div>
           </div>
           
-          <div className="flex bg-zinc-950 rounded-lg p-1 border border-zinc-800">
+          <div className="flex bg-zinc-950 rounded-lg p-1 border border-zinc-800 overflow-x-auto">
              <button 
                onClick={() => setActiveTab('CREATE')}
-               className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-colors flex items-center gap-2 ${activeTab === 'CREATE' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+               className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'CREATE' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
              >
                <Film size={14} /> Studio
              </button>
              <button 
                onClick={() => setActiveTab('EDITOR')}
-               className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-colors flex items-center gap-2 ${activeTab === 'EDITOR' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+               className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'EDITOR' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
              >
-               <Scissors size={14} /> Editor (Beta)
+               <Scissors size={14} /> Editor
              </button>
              <button 
                onClick={() => setActiveTab('LIBRARY')}
-               className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-colors flex items-center gap-2 ${activeTab === 'LIBRARY' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+               className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'LIBRARY' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
              >
-               <Library size={14} /> Biblioteca ({library.length})
+               <Library size={14} /> Biblioteca
+             </button>
+             <button 
+               onClick={() => setActiveTab('GALLERY')}
+               className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'GALLERY' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+             >
+               <Video size={14} /> Inspiração
              </button>
           </div>
         </div>
@@ -511,6 +524,64 @@ const App: React.FC = () => {
 
       <main className="max-w-6xl mx-auto px-6 py-12 flex-grow w-full">
         
+        {/* --- GALLERY TAB --- */}
+        {activeTab === 'GALLERY' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+            <h2 className="text-xl font-cinema text-white flex items-center gap-2 mb-6">
+               <Video size={20} className="text-amber-500" /> Galeria de Inspiração & Exemplos
+            </h2>
+            
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 mb-8 flex flex-col md:flex-row items-center gap-6">
+               <div className="flex-1">
+                  <h3 className="text-lg font-bold text-white mb-2">Exemplos Reais do Autor</h3>
+                  <p className="text-zinc-400 text-sm mb-4">Veja como Julio Campos Machado utiliza esta ferramenta para criar cenas da série Juliette Psicose. Assista aos vídeos gerados e inspire-se.</p>
+                  <a href="https://www.facebook.com/juliocamposmachado/posts/pfbid0236teP9jf3Ljs48fqj2Kizr9Zr2EaaftginAJL4qjbsWdFAHmJ9aErQ8Zont8mKdcl" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-[#1877F2] hover:bg-[#166fe5] text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors">
+                     <Facebook size={16} /> Ver Post no Facebook com Vídeos
+                  </a>
+               </div>
+               <div className="w-full md:w-1/3 aspect-video bg-black rounded-lg border border-zinc-800 flex items-center justify-center relative overflow-hidden group cursor-pointer" onClick={() => window.open('https://www.facebook.com/juliocamposmachado/posts/pfbid0236teP9jf3Ljs48fqj2Kizr9Zr2EaaftginAJL4qjbsWdFAHmJ9aErQ8Zont8mKdcl', '_blank')}>
+                  <img src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=1925&auto=format&fit=crop" alt="Cena Exemplo" className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                     <Play className="text-white fill-white w-12 h-12 opacity-80" />
+                  </div>
+               </div>
+            </div>
+
+            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4">Templates de Roteiro (Juliette Psicose)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+               {[
+                  {
+                     title: "O Corredor Infinito",
+                     desc: "Uma cena de tensão psicológica onde o ambiente reflete o estado mental da protagonista.",
+                     prompt: "INT. CORREDOR DO HOSPÍCIO - NOITE\n\nO corredor parece se estender infinitamente. A iluminação pisca erraticamente.\n\nJuliette caminha lentamente, sua mão tocando a parede fria e úmida.\n\nJuliette: \"Eu sei que você está aqui.\"\n\nA sombra do Antagonista se forma no final do corredor, imóvel e silenciosa. A câmera faz um Dolly Zoom (Vertigo Effect) no rosto de Juliette."
+                  },
+                  {
+                     title: "O Espelho da Alma",
+                     desc: "Diálogo introspectivo frente a um espelho quebrado, revelando a dualidade.",
+                     prompt: "INT. QUARTO ANTIGO - DIA\n\nJuliette está sentada em frente a uma penteadeira com o espelho rachado.\n\nEla encara seu próprio reflexo, mas a imagem parece sorrir de volta com atraso.\n\nAntagonista (Voz Off): \"Qual de nós é a real?\"\n\nJuliette toca o vidro, e o reflexo se estilhaça visualmente, transformando-se em várias versões dela mesma."
+                  },
+                  {
+                     title: "O Confronto na Chuva",
+                     desc: "Cena dramática externa com atmosfera pesada e design de som imersivo.",
+                     prompt: "EXT. JARDIM ABANDONADO - CHUVA TORRENCIAL - NOITE\n\nA chuva cai pesada, encharcando Juliette e o Antagonista que estão frente a frente.\n\nJuliette grita, mas o som é abafado pelo trovão.\n\nAntagonista: \"A chuva não limpa pecados, Juliette. Ela só revela o que estava escondido na lama.\"\n\nUm relâmpago ilumina o rosto do Antagonista, revelando uma expressão de tristeza profunda."
+                  }
+               ].map((template, i) => (
+                  <div key={i} className="bg-zinc-900 border border-zinc-800 p-5 rounded-xl hover:border-amber-600/50 transition-all group">
+                     <h4 className="font-cinema text-white font-bold mb-2">{template.title}</h4>
+                     <p className="text-zinc-400 text-xs mb-4 h-10">{template.desc}</p>
+                     <div className="bg-black p-3 rounded text-[10px] text-zinc-500 font-mono italic mb-4 h-24 overflow-hidden relative">
+                        "{template.prompt}"
+                        <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-black to-transparent"></div>
+                     </div>
+                     <button onClick={() => handleUseTemplate(template.prompt)} className="w-full py-2 bg-zinc-800 group-hover:bg-amber-700 text-white text-xs font-bold rounded transition-colors">
+                        Usar Este Roteiro
+                     </button>
+                  </div>
+               ))}
+            </div>
+          </div>
+        )}
+
         {/* --- LIBRARY TAB --- */}
         {activeTab === 'LIBRARY' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
