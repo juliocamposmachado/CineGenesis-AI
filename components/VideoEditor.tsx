@@ -497,7 +497,7 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
   }, [isResizing]);
 
   return (
-    <div className="flex flex-col h-full gap-4 relative">
+    <div className="flex flex-col h-full gap-4 relative overflow-y-auto custom-scrollbar p-1">
       
       {/* --- LIBRARY MODAL --- */}
       {showLibraryModal && (

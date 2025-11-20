@@ -501,7 +501,7 @@ const App: React.FC = () => {
 
   // 3. Render MAIN APP
   return (
-    <div className="min-h-screen bg-black text-zinc-200 selection:bg-amber-500/30 flex flex-col relative">
+    <div className={`min-h-screen bg-black text-zinc-200 selection:bg-amber-500/30 flex flex-col relative ${activeTab === 'EDITOR' ? 'h-screen overflow-hidden' : ''}`}>
       
       {/* --- LOADING CUP ANIMATION (OVERLAY) --- */}
       {isEditorLoading && (
@@ -525,7 +525,7 @@ const App: React.FC = () => {
 
       {!disclaimerAccepted && <SafetyModal onAccept={() => setDisclaimerAccepted(true)} />}
 
-      <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-40">
+      <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-40 flex-shrink-0">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-gradient-to-br from-amber-600 to-red-700 rounded-lg shadow-lg shadow-red-900/20">
@@ -566,7 +566,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-12 flex-grow w-full">
+      <main className={`max-w-6xl mx-auto px-6 w-full ${activeTab === 'EDITOR' ? 'flex-grow overflow-hidden py-4 h-[calc(100vh-85px)]' : 'flex-grow py-12'}`}>
         
         {/* --- GALLERY TAB --- */}
         {activeTab === 'GALLERY' && (
@@ -713,13 +713,13 @@ const App: React.FC = () => {
 
         {/* --- EDITOR TAB --- */}
         {activeTab === 'EDITOR' && (
-           <div className="animate-in fade-in">
-              <div className="flex items-center justify-between mb-6">
+           <div className="animate-in fade-in h-full flex flex-col">
+              <div className="flex items-center justify-between mb-4 flex-shrink-0">
                  <h2 className="text-xl font-cinema text-white flex items-center gap-2">
                     <Scissors size={20} className="text-amber-500" /> Frame Editor & Compositor (Beta)
                  </h2>
               </div>
-              <div className="h-[80vh]">
+              <div className="flex-1 min-h-0 overflow-hidden">
                  <VideoEditor 
                     clips={editorClips}
                     onClipsChange={setEditorClips}
@@ -919,24 +919,26 @@ const App: React.FC = () => {
 
       </main>
 
-      <footer className="border-t border-zinc-900 bg-zinc-950 py-8 mt-8">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="text-center md:text-left">
-            <p className="text-amber-500 font-cinema font-bold text-lg">Like Look Solutions</p>
-            <p className="text-zinc-500 text-xs mt-1">Autor & Dev: <span className="text-zinc-300">Julio Campos Machado</span></p>
-             <p className="text-zinc-600 text-[10px] mt-1 italic">Série Juliette Psicose - Todos os direitos reservados</p>
-            <div className="flex flex-wrap gap-3 text-[10px] text-zinc-600 mt-2 justify-center md:justify-start">
-              <span className="hover:text-zinc-400 transition-colors cursor-default">+55 11 99294-6628</span>
-              <span className="text-zinc-800">•</span>
-              <span className="hover:text-zinc-400 transition-colors cursor-default">+55 11 97060-3441</span>
+      {activeTab !== 'EDITOR' && (
+        <footer className="border-t border-zinc-900 bg-zinc-950 py-8 mt-8 flex-shrink-0">
+          <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-center md:text-left">
+              <p className="text-amber-500 font-cinema font-bold text-lg">Like Look Solutions</p>
+              <p className="text-zinc-500 text-xs mt-1">Autor & Dev: <span className="text-zinc-300">Julio Campos Machado</span></p>
+              <p className="text-zinc-600 text-[10px] mt-1 italic">Série Juliette Psicose - Todos os direitos reservados</p>
+              <div className="flex flex-wrap gap-3 text-[10px] text-zinc-600 mt-2 justify-center md:justify-start">
+                <span className="hover:text-zinc-400 transition-colors cursor-default">+55 11 99294-6628</span>
+                <span className="text-zinc-800">•</span>
+                <span className="hover:text-zinc-400 transition-colors cursor-default">+55 11 97060-3441</span>
+              </div>
             </div>
+            <SocialLinks />
           </div>
-          <SocialLinks />
-        </div>
-        <div className="text-center text-[10px] text-zinc-800 mt-6 border-t border-zinc-900/50 pt-4">
-          &copy; {new Date().getFullYear()} CineGenesis AI para Like Look Solutions.
-        </div>
-      </footer>
+          <div className="text-center text-[10px] text-zinc-800 mt-6 border-t border-zinc-900/50 pt-4">
+            &copy; {new Date().getFullYear()} CineGenesis AI para Like Look Solutions.
+          </div>
+        </footer>
+      )}
     </div>
   );
 };
