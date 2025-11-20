@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import SafetyModal from './components/SafetyModal';
 import { UploadedImage, AppStatus, VoiceSettings, LibraryItem, ProductionSettings } from './types';
@@ -98,6 +98,9 @@ const App: React.FC = () => {
 
   // Splash Screen State
   const [showSplash, setShowSplash] = useState(true);
+
+  // Video Ref for Frame Capture
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 4000);
@@ -275,6 +278,31 @@ const App: React.FC = () => {
   const handleCancelExtension = () => {
     setIsExtensionMode(false);
     setPrompt("");
+  };
+
+  const handleSaveFrame = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      // Draw current video frame to canvas
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Convert to data URL
+      const dataUrl = canvas.toDataURL('image/png');
+      
+      // Trigger download
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = `juliette_frame_${Date.now()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   // Social Links
@@ -677,9 +705,14 @@ const App: React.FC = () => {
 
                   {status === AppStatus.COMPLETED && videoUrl && !isProcessing && (
                     <div className="w-full">
-                      <video controls autoPlay loop className="w-full rounded-lg shadow-2xl border border-zinc-700" src={videoUrl} />
-                      <div className="mt-4 flex justify-between items-center bg-zinc-900 p-4 rounded border border-zinc-800">
-                        <span className="text-xs text-green-500 flex items-center gap-1"><Save size={12} /> Salvo automaticamente na Biblioteca</span>
+                      <video ref={videoRef} controls autoPlay loop className="w-full rounded-lg shadow-2xl border border-zinc-700" src={videoUrl} />
+                      <div className="mt-4 flex justify-between items-center bg-zinc-900 p-4 rounded border border-zinc-800 flex-wrap gap-2">
+                        <span className="text-xs text-green-500 flex items-center gap-1 mr-auto"><Save size={12} /> Salvo automaticamente na Biblioteca</span>
+                        
+                        <button onClick={handleSaveFrame} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded font-bold flex items-center gap-2 border border-zinc-700">
+                           <Camera size={14} /> Salvar Frame (Ref)
+                        </button>
+
                         {!isExtensionMode && (
                           <button onClick={handleEnterExtensionMode} className="px-4 py-2 bg-amber-700 hover:bg-amber-600 text-white text-xs rounded font-bold flex items-center gap-2">
                             <PlusCircle size={14} /> Estender (+5s)
