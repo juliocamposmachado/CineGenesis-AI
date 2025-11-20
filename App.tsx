@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import SafetyModal from './components/SafetyModal';
 import { UploadedImage, AppStatus } from './types';
@@ -206,9 +206,19 @@ const App: React.FC = () => {
                   {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-              <p className="text-[10px] text-zinc-500 mt-2 flex items-center gap-1 leading-tight">
-                <Sparkles size={10} className="text-amber-500" /> Necessário para usar o modelo Veo 3.1.
-              </p>
+              <div className="mt-3 flex flex-col gap-2">
+                <p className="text-[10px] text-zinc-500 flex items-center gap-1 leading-tight">
+                  <Sparkles size={10} className="text-amber-500" /> Necessário para usar o modelo Veo 3.1.
+                </p>
+                <a 
+                  href="https://aistudio.google.com/app/apikey" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-amber-600 hover:text-amber-400 transition-colors flex items-center gap-1 w-fit hover:underline"
+                >
+                  Obter Chave de API (Google AI Studio) <ExternalLink size={10} />
+                </a>
+              </div>
             </section>
 
             {/* Image Slots */}
