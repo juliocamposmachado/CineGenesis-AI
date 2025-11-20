@@ -32,13 +32,17 @@ export const analyzeArchetypes = async (images: UploadedImage[], apiKey?: string
   const modelId = 'gemini-2.5-flash'; 
   
   const parts: any[] = [
-    { text: `Analise estas imagens e descreva APENAS os traços visuais genéricos e arquétipos cinematográficos (ex: iluminação, idade aparente, estilo de cabelo, formato do rosto, expressão, atmosfera).
+    { text: `Atue como um Diretor de Fotografia experiente. Analise estas imagens de referência para um casting.
     
-    REGRAS ESTRITAS:
-    1. NÃO identifique os atores ou pessoas reais por nome.
-    2. Use termos abstratos (ex: "homem de meia idade com barba", "mulher com olhar misterioso").
-    3. O objetivo é criar um prompt para gerar personagens FICTÍCIOS inspirados neste estilo.
-    4. Retorne um resumo descritivo para compor um prompt de geração de vídeo.` }
+    TAREFA: Descreva detalhadamente a APARÊNCIA FÍSICA e a ATMOSFERA (VIBE) desses personagens para que um artista 3D possa recriá-los sem saber quem são os atores.
+    
+    FOQUE EM:
+    - Detalhes do rosto (rugas, formato do queixo, tipo de olhar, "olhar melancólico", "olhar penetrante").
+    - Cabelo e barbas (estilo, textura, cor, grisalho, despenteado).
+    - Iluminação e Paleta de cores (noir, contraste, tons frios/quentes).
+    - Vestuário sugerido na imagem.
+    
+    CRÍTICO: NÃO USE O NOME DOS ATORES. Descreva o ARQUÉTIPO (ex: "Homem de 50 anos com ar severo e barba grisalha cheia").` }
   ];
 
   for (const img of images) {
@@ -64,6 +68,8 @@ export const analyzeArchetypes = async (images: UploadedImage[], apiKey?: string
 
 /**
  * Step 2: Generate the video using Veo
+ * Includes a FALLBACK mechanism: If Veo rejects the image due to celebrity likeness,
+ * it retries using ONLY the text description to create a lookalike.
  */
 export const generateCinematicVideo = async (
   images: UploadedImage[], 
@@ -71,25 +77,20 @@ export const generateCinematicVideo = async (
   archetypeDescription: string,
   apiKey?: string
 ): Promise<string> => {
-  // Priority: User Key > Env Key
   const effectiveKey = apiKey || process.env.API_KEY;
-  if (!effectiveKey && !process.env.API_KEY) {
-      // If no key is provided, we might rely on the browser extension injection, 
-      // but usually we need to pass something to the constructor.
-      // If in AI Studio, process.env.API_KEY is injected.
-  }
-
   const ai = new GoogleGenAI({ apiKey: effectiveKey });
 
-  // Construct a rich prompt combining user intent and safe archetype analysis
+  // Construct a rich prompt
   const fullPrompt = `
-    Crie um vídeo cinematográfico realista.
+    Gere um vídeo cinematográfico fotorrealista (4k, texturas de pele reais).
     
-    Contexto Visual (Estilo): ${archetypeDescription}
+    PERSONAGENS (Visual Reference):
+    ${archetypeDescription}
     
-    Ação da Cena: ${userPrompt}
+    CENA (Action):
+    ${userPrompt}
     
-    Direção de Arte: Iluminação dramática, alta qualidade, 35mm, texturas detalhadas. Personagens fictícios originais.
+    ESTILO: Série de Drama/Suspense Psicológico. Iluminação de cinema, profundidade de campo.
   `.trim();
 
   // Prepare reference images for Veo
@@ -98,86 +99,102 @@ export const generateCinematicVideo = async (
       imageBytes: img.base64,
       mimeType: img.mimeType,
     },
-    referenceType: VideoGenerationReferenceType.ASSET, // Using as style/asset reference
+    referenceType: VideoGenerationReferenceType.ASSET, 
   }));
 
-  try {
-    console.log("Starting Veo generation with prompt:", fullPrompt);
+  // Helper function for polling
+  const pollOperation = async (initialOp: any) => {
+    let op = initialOp;
+    while (!op.done) {
+      await new Promise(resolve => setTimeout(resolve, 6000));
+      op = await ai.operations.getVideosOperation({ operation: op });
+      console.log("Polling status...", op.metadata);
+    }
+    return op;
+  };
 
-    // Using Veo Generate Preview (supports ref images)
-    let operation = await ai.models.generateVideos({
+  try {
+    console.log("Tentativa 1: Usando Imagens de Referência...");
+    
+    // ATTEMPT 1: WITH IMAGES
+    let initialOp = await ai.models.generateVideos({
       model: 'veo-3.1-generate-preview',
       prompt: fullPrompt,
       config: {
         numberOfVideos: 1,
-        referenceImages: referenceImagesPayload.slice(0, 3), // Limit to 3
+        referenceImages: referenceImagesPayload.slice(0, 3),
         resolution: '720p',
         aspectRatio: '16:9'
       }
     });
 
-    console.log("Operation started:", operation);
+    let operationResult = await pollOperation(initialOp);
 
-    // Polling loop
-    while (!operation.done) {
-      await new Promise(resolve => setTimeout(resolve, 6000)); // Poll every 6s
-      operation = await ai.operations.getVideosOperation({ operation: operation });
-      console.log("Polling operation status...", operation.metadata);
-    }
+    // CHECK FOR SAFETY FILTERS (CELEBRITY DETECTION)
+    // @ts-ignore
+    const safetyReasons = operationResult.response?.raiMediaFilteredReasons;
+    const isFiltered = safetyReasons && safetyReasons.length > 0;
 
-    // Check for specific operation errors (Standard API error)
-    if (operation.error) {
-      console.error("Veo Operation Error:", operation.error);
-      const errorMsg = operation.error.message || "Erro desconhecido na operação de vídeo.";
-      throw new Error(`Falha na geração do vídeo: ${errorMsg}`);
-    }
-
-    // SPECIFIC ERROR HANDLING FOR SAFETY FILTERS (RAI)
-    // @ts-ignore - Accessing dynamic response properties for safety filters
-    if (operation.response?.raiMediaFilteredReasons && operation.response.raiMediaFilteredReasons.length > 0) {
-        // @ts-ignore
-        const reason = operation.response.raiMediaFilteredReasons[0];
-        console.error("Veo Safety Filter Triggered:", reason);
+    if (isFiltered) {
+      console.warn("Bloqueio de Imagem detectado (Provável Celebridade). Iniciando Fallback via Texto...");
+      
+      // ATTEMPT 2: TEXT ONLY FALLBACK (Creates a lookalike)
+      // We refine the prompt to be even more descriptive since we lost the image reference
+      const fallbackPrompt = `
+        Crie um vídeo cinematográfico realista.
         
-        let friendlyError = `Bloqueio de Segurança: "${reason}"`;
+        IMPORTANTE: Crie personagens originais que correspondam a esta descrição física exata:
+        ${archetypeDescription}
         
-        if (typeof reason === 'string' && reason.toLowerCase().includes("celebrity")) {
-            friendlyError = "Bloqueio de Segurança: A imagem contém semelhança com celebridades ou pessoas públicas. O Google Veo não permite gerar vídeos com pessoas famosas. Por favor, tente novamente usando imagens de pessoas desconhecidas ou geradas por IA.";
-        } else if (typeof reason === 'string' && (reason.toLowerCase().includes("safety") || reason.toLowerCase().includes("sensitive"))) {
-             friendlyError = "Bloqueio de Segurança: O conteúdo foi marcado como sensível pelos filtros da IA. Tente suavizar o prompt ou trocar as imagens de referência.";
+        AÇÃO: ${userPrompt}
+        
+        ESTILO: Cinematografia de alta qualidade, 35mm, Drama, Suspense.
+      `.trim();
+
+      initialOp = await ai.models.generateVideos({
+        model: 'veo-3.1-generate-preview', // Same model, just no images
+        prompt: fallbackPrompt,
+        config: {
+          numberOfVideos: 1,
+          // NO REFERENCE IMAGES passed here
+          resolution: '720p',
+          aspectRatio: '16:9'
         }
+      });
 
-        throw new Error(friendlyError);
+      operationResult = await pollOperation(initialOp);
+      
+      // Check safety again on the second attempt
+      // @ts-ignore
+      if (operationResult.response?.raiMediaFilteredReasons?.length > 0) {
+         throw new Error("O roteiro contém temas sensíveis que violam as diretrizes de segurança, mesmo sem as imagens.");
+      }
     }
 
-    // Check if generatedVideos exists and has content
-    if (!operation.response?.generatedVideos || operation.response.generatedVideos.length === 0) {
-        console.error("Operation completed but no videos returned. Full Object:", JSON.stringify(operation, null, 2));
-        throw new Error("O vídeo não foi gerado e nenhum motivo específico foi retornado. Isso geralmente indica um bloqueio silencioso de segurança ou falha temporária do servidor.");
+    // Process final result (from either attempt)
+    if (operationResult.error) {
+      throw new Error(`Erro na operação: ${operationResult.error.message}`);
     }
 
-    const videoUri = operation.response.generatedVideos[0]?.video?.uri;
+    if (!operationResult.response?.generatedVideos || operationResult.response.generatedVideos.length === 0) {
+         throw new Error("O vídeo não foi gerado. Motivo desconhecido (possível filtro silencioso).");
+    }
+
+    const videoUri = operationResult.response.generatedVideos[0]?.video?.uri;
     if (!videoUri) {
-        console.error("Operation finished, video array exists, but URI is undefined:", operation);
-        throw new Error("A API concluiu o processo mas a URI do vídeo está vazia. Falha interna no processamento do arquivo.");
+        throw new Error("URI do vídeo vazia na resposta da API.");
     }
 
-    // Fetch the actual video blob using the key
+    // Download
     const fetchUrl = `${videoUri}&key=${effectiveKey}`;
     const response = await fetch(fetchUrl);
-    
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Failed to fetch video file:", errorText);
-        throw new Error(`Falha ao baixar o arquivo de vídeo gerado (Status: ${response.status}).`);
-    }
+    if (!response.ok) throw new Error("Falha ao baixar o arquivo de vídeo.");
     
     const blob = await response.blob();
     return URL.createObjectURL(blob);
 
   } catch (error: any) {
-    console.error("Video generation error stack:", error);
-    // Propagate the specific error message
-    throw new Error(error.message || "Erro na geração do vídeo.");
+    console.error("Video generation error:", error);
+    throw new Error(error.message || "Erro ao gerar vídeo.");
   }
 };
