@@ -208,7 +208,7 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
                 Crie o impossível.
               </h1>
               <p className="text-zinc-400 text-sm leading-relaxed mb-4">
-                A ferramenta definitiva para visualização cinematográfica da série <span className="text-amber-500 font-cinema">Juliette Psicose</span>.
+                A ferramenta definitiva para visualização cinematográfica da série <a href="https://linktr.ee/juliette.psicose" target="_blank" rel="noopener noreferrer" className="text-amber-500 font-cinema hover:text-amber-400 hover:underline transition-colors">Juliette Psicose</a>.
               </p>
 
               <a 
