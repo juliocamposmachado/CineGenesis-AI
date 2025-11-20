@@ -22,8 +22,9 @@ export const checkApiKey = async (): Promise<boolean> => {
  * Step 1: Analyze the uploaded images to extract archetypal descriptions
  * strictly avoiding proper names to ensure the fictional character constraint.
  */
-export const analyzeArchetypes = async (images: UploadedImage[]): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+export const analyzeArchetypes = async (images: UploadedImage[], apiKey?: string): Promise<string> => {
+  // Use user provided key or fallback to env
+  const ai = new GoogleGenAI({ apiKey: apiKey || process.env.API_KEY });
   
   // Use Flash for fast multimodal analysis
   const modelId = 'gemini-2.5-flash'; 
@@ -55,7 +56,7 @@ export const analyzeArchetypes = async (images: UploadedImage[]): Promise<string
     return response.text || "Arquétipos visuais dramáticos e cinematográficos.";
   } catch (error) {
     console.error("Error analyzing images:", error);
-    throw new Error("Falha ao analisar os arquétipos das imagens.");
+    throw new Error("Falha ao analisar os arquétipos das imagens. Verifique sua chave de API.");
   }
 };
 
@@ -65,9 +66,11 @@ export const analyzeArchetypes = async (images: UploadedImage[]): Promise<string
 export const generateCinematicVideo = async (
   images: UploadedImage[], 
   userPrompt: string, 
-  archetypeDescription: string
+  archetypeDescription: string,
+  apiKey?: string
 ): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Use user provided key or fallback to env
+  const ai = new GoogleGenAI({ apiKey: apiKey || process.env.API_KEY });
 
   // Construct a rich prompt combining user intent and safe archetype analysis
   const fullPrompt = `
@@ -112,7 +115,9 @@ export const generateCinematicVideo = async (
     if (!videoUri) throw new Error("URI do vídeo não retornada.");
 
     // Fetch the actual video blob using the key
-    const response = await fetch(`${videoUri}&key=${process.env.API_KEY}`);
+    // Note: If using a custom key, we need to append it here as well
+    const keyToUse = apiKey || process.env.API_KEY;
+    const response = await fetch(`${videoUri}&key=${keyToUse}`);
     if (!response.ok) throw new Error("Falha ao baixar o vídeo gerado.");
     
     const blob = await response.blob();

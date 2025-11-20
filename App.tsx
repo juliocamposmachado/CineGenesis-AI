@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import SafetyModal from './components/SafetyModal';
 import { UploadedImage, AppStatus } from './types';
@@ -13,11 +13,27 @@ const App: React.FC = () => {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [progressMsg, setProgressMsg] = useState('');
+  
+  // API Key State
+  const [userApiKey, setUserApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
 
   useEffect(() => {
-    // Initial API check
+    // Check local storage for API Key
+    const storedKey = localStorage.getItem('gemini_api_key');
+    if (storedKey) {
+      setUserApiKey(storedKey);
+    }
+
+    // Initial environment check
     checkApiKey().catch(console.error);
   }, []);
+
+  const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setUserApiKey(val);
+    localStorage.setItem('gemini_api_key', val);
+  };
 
   const handleImageUpload = async (file: File, key: string) => {
     const reader = new FileReader();
@@ -43,20 +59,24 @@ const App: React.FC = () => {
     setVideoUrl(null);
 
     try {
-      // Ensure key is selected
-      await checkApiKey();
+      // Check if we have a key (either user provided or env)
+      if (!userApiKey) {
+        await checkApiKey();
+      }
 
       // 1. Analyze Archetypes
       setProgressMsg("Analisando arquétipos visuais e extraindo estilo...");
       const uploadedImages = [images.A, images.B];
-      const archetypes = await analyzeArchetypes(uploadedImages);
+      // Pass the userApiKey to the service
+      const archetypes = await analyzeArchetypes(uploadedImages, userApiKey);
       console.log("Archetypes detected:", archetypes);
 
       // 2. Generate Video
       setStatus(AppStatus.GENERATING);
       setProgressMsg("Renderizando cena cinematográfica com Veo AI (isso pode levar alguns minutos)...");
       
-      const url = await generateCinematicVideo(uploadedImages, prompt, archetypes);
+      // Pass the userApiKey to the service
+      const url = await generateCinematicVideo(uploadedImages, prompt, archetypes, userApiKey);
       
       setVideoUrl(url);
       setStatus(AppStatus.COMPLETED);
@@ -64,7 +84,7 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       setStatus(AppStatus.ERROR);
-      setErrorMsg(err.message || "Ocorreu um erro desconhecido durante a geração.");
+      setErrorMsg(err.message || "Ocorreu um erro desconhecido durante a geração. Verifique se sua chave de API tem permissões para Veo.");
     }
   };
 
@@ -96,6 +116,32 @@ const App: React.FC = () => {
           {/* Left Column: Inputs */}
           <div className="lg:col-span-4 space-y-8">
             
+            {/* API Key Section */}
+            <section className="bg-zinc-900/30 p-4 rounded-xl border border-zinc-800">
+              <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Key size={14} /> Configuração da API
+              </h2>
+              <div className="relative">
+                <input
+                  type={showApiKey ? "text" : "password"}
+                  value={userApiKey}
+                  onChange={handleApiKeyChange}
+                  placeholder="Cole sua Gemini API Key aqui..."
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg py-2 pl-3 pr-10 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all"
+                />
+                <button
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                  title={showApiKey ? "Ocultar chave" : "Mostrar chave"}
+                >
+                  {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-zinc-600 mt-2">
+                Sua chave será salva localmente no navegador para uso futuro.
+              </p>
+            </section>
+
             {/* Image Slots */}
             <section>
               <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
