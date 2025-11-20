@@ -26,6 +26,14 @@ export interface VoiceSettings {
   characterB: string; // Voice description for Antagonist
 }
 
+export interface ProductionSettings {
+  transitionStart: 'NONE' | 'FADE_IN' | 'BLUR_IN';
+  transitionEnd: 'NONE' | 'FADE_OUT' | 'HARD_CUT';
+  audioFadeIn: boolean;
+  audioFadeOut: boolean;
+  ambientSound: string; // e.g., "Chuva forte", "Cidade distante"
+}
+
 export interface LibraryItem {
   id: string;
   timestamp: number;

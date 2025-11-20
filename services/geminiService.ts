@@ -1,5 +1,5 @@
 import { GoogleGenAI, VideoGenerationReferenceImage, VideoGenerationReferenceType } from "@google/genai";
-import { UploadedImage, VoiceSettings } from "../types";
+import { UploadedImage, VoiceSettings, ProductionSettings } from "../types";
 
 // Helper to check/request API key via AI Studio extension
 export const checkApiKey = async (): Promise<boolean> => {
@@ -16,6 +16,27 @@ export const checkApiKey = async (): Promise<boolean> => {
     return true;
   }
   return false; // Return false if extension is not available, forcing manual key entry
+};
+
+/**
+ * Helper to construct the technical prompt part for transitions and audio
+ */
+const buildProductionPrompt = (settings: ProductionSettings): string => {
+  let instructions = "\nDIREÇÃO TÉCNICA (Cinematography & Sound):\n";
+
+  // Visual Transitions
+  if (settings.transitionStart === 'FADE_IN') instructions += "- CAMERA: Start with a smooth FADE-IN from black.\n";
+  if (settings.transitionStart === 'BLUR_IN') instructions += "- CAMERA: Start out of focus and slowly focus on the subject (Rack Focus).\n";
+  if (settings.transitionEnd === 'FADE_OUT') instructions += "- CAMERA: End with a smooth FADE-OUT to black.\n";
+  
+  // Audio Atmosphere & Transitions
+  instructions += `- AUDIO ATMOSPHERE: ${settings.ambientSound || "Natural cinematic silence"}.\n`;
+  if (settings.audioFadeIn) instructions += "- AUDIO MIX: Smooth volume fade-in at the beginning.\n";
+  if (settings.audioFadeOut) instructions += "- AUDIO MIX: Smooth volume fade-out at the end.\n";
+  
+  instructions += "- SOUND QUALITY: Mastered for cinema, clear dialogue, immersive 3D spatial audio.\n";
+
+  return instructions;
 };
 
 /**
@@ -85,6 +106,7 @@ export const generateCinematicVideo = async (
   userPrompt: string, 
   archetypeDescription: string,
   voiceSettings: VoiceSettings,
+  productionSettings: ProductionSettings,
   apiKey?: string
 ): Promise<{ videoUrl: string, videoAsset: any, blob: Blob }> => {
   const effectiveKey = apiKey || process.env.API_KEY;
@@ -92,11 +114,13 @@ export const generateCinematicVideo = async (
 
   // Construct Voice Context
   const voiceContext = `
-    DIREÇÃO DE ÁUDIO (Audio Consistency):
+    DIREÇÃO DE ÁUDIO (Voice Acting):
     - Voz Personagem A (Protagonista): ${voiceSettings.characterA || "Natural, cinematográfica"}
     - Voz Personagem B (Antagonista): ${voiceSettings.characterB || "Natural, cinematográfica"}
     - O áudio deve ser de alta fidelidade, sincronizado com a emoção facial.
   `.trim();
+
+  const productionContext = buildProductionPrompt(productionSettings);
 
   const fullPrompt = `
     Gere um vídeo cinematográfico fotorrealista com áudio (4k).
@@ -105,6 +129,7 @@ export const generateCinematicVideo = async (
     ${archetypeDescription}
     
     ${voiceContext}
+    ${productionContext}
     
     CENA (Action):
     ${userPrompt}
@@ -151,6 +176,7 @@ export const generateCinematicVideo = async (
         ${archetypeDescription}
         
         ${voiceContext}
+        ${productionContext}
 
         AÇÃO: ${userPrompt}
         
@@ -211,6 +237,7 @@ export const extendCinematicVideo = async (
   previousVideoAsset: any,
   newPrompt: string,
   voiceSettings: VoiceSettings,
+  productionSettings: ProductionSettings,
   apiKey?: string
 ): Promise<{ videoUrl: string, videoAsset: any, blob: Blob }> => {
   const effectiveKey = apiKey || process.env.API_KEY;
@@ -226,13 +253,15 @@ export const extendCinematicVideo = async (
     - B: ${voiceSettings.characterB}
   `.trim();
 
+  const productionContext = buildProductionPrompt(productionSettings);
+
   try {
     console.log("Iniciando extensão de vídeo com consistência vocal...");
     
     // Veo extension request
     let initialOp = await ai.models.generateVideos({
       model: 'veo-3.1-generate-preview',
-      prompt: `${newPrompt}. ${voiceContext}. (Mantenha a consistência visual exata e continuidade da ação)`,
+      prompt: `${newPrompt}. ${voiceContext} ${productionContext} (Mantenha a consistência visual exata e continuidade da ação)`,
       video: previousVideoAsset, // Passing the raw asset guarantees continuity
       config: {
         numberOfVideos: 1,

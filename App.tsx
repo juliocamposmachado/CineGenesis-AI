@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import SafetyModal from './components/SafetyModal';
-import { UploadedImage, AppStatus, VoiceSettings, LibraryItem } from './types';
+import { UploadedImage, AppStatus, VoiceSettings, LibraryItem, ProductionSettings } from './types';
 import { checkApiKey, analyzeArchetypes, generateCinematicVideo, extendCinematicVideo } from './services/geminiService';
 
 // --- IndexedDB Helpers for Video Storage ---
@@ -80,6 +80,15 @@ const App: React.FC = () => {
     characterB: "Voz suave, misteriosa, levemente rouca."
   });
 
+  // Production Settings (Transitions & Atmosphere)
+  const [productionSettings, setProductionSettings] = useState<ProductionSettings>({
+    transitionStart: 'NONE',
+    transitionEnd: 'NONE',
+    audioFadeIn: true,
+    audioFadeOut: true,
+    ambientSound: "Som ambiente natural, imersivo e cinematográfico"
+  });
+
   // Library State
   const [library, setLibrary] = useState<LibraryItem[]>([]);
 
@@ -137,6 +146,10 @@ const App: React.FC = () => {
     localStorage.setItem('voice_settings', JSON.stringify(newSettings));
   };
 
+  const handleProductionChange = (key: keyof ProductionSettings, val: any) => {
+    setProductionSettings(prev => ({ ...prev, [key]: val }));
+  };
+
   const handleImageUpload = async (file: File, key: string) => {
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -170,7 +183,7 @@ const App: React.FC = () => {
         setStatus(AppStatus.EXTENDING);
         setProgressMsg("Capturando frame final e gerando continuação com áudio...");
         
-        const result = await extendCinematicVideo(lastVideoAsset, prompt, voiceSettings, userApiKey);
+        const result = await extendCinematicVideo(lastVideoAsset, prompt, voiceSettings, productionSettings, userApiKey);
         
         setVideoUrl(result.videoUrl);
         setCurrentBlob(result.blob);
@@ -193,7 +206,7 @@ const App: React.FC = () => {
         setStatus(AppStatus.GENERATING);
         setProgressMsg("Rodando motor Veo AI + Sincronização Vocal...");
         
-        const result = await generateCinematicVideo(uploadedImages, prompt, archetypes, voiceSettings, userApiKey);
+        const result = await generateCinematicVideo(uploadedImages, prompt, archetypes, voiceSettings, productionSettings, userApiKey);
         
         setVideoUrl(result.videoUrl);
         setCurrentBlob(result.blob);
@@ -468,12 +481,80 @@ const App: React.FC = () => {
                 </div>
               </section>
 
+              {/* Transitions & Atmosphere (NEW SECTION) */}
+              <section>
+                <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-400">3</span>
+                  Transições & Atmosfera
+                </h2>
+                <div className="space-y-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800">
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-zinc-500 uppercase flex items-center gap-1"><SunMoon size={10} /> Início Cena</label>
+                      <select 
+                        value={productionSettings.transitionStart}
+                        onChange={(e) => handleProductionChange('transitionStart', e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-700 rounded p-1.5 text-xs text-white focus:border-amber-500 outline-none"
+                      >
+                        <option value="NONE">Corte Seco (Padrão)</option>
+                        <option value="FADE_IN">Fade In (Do Preto)</option>
+                        <option value="BLUR_IN">Foco Progressivo</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-zinc-500 uppercase flex items-center gap-1"><SunMoon size={10} /> Fim Cena</label>
+                      <select 
+                         value={productionSettings.transitionEnd}
+                         onChange={(e) => handleProductionChange('transitionEnd', e.target.value)}
+                         className="w-full bg-zinc-950 border border-zinc-700 rounded p-1.5 text-xs text-white focus:border-amber-500 outline-none"
+                      >
+                        <option value="NONE">Sem Transição</option>
+                        <option value="FADE_OUT">Fade Out (Para Preto)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 px-1">
+                     <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={productionSettings.audioFadeIn}
+                          onChange={(e) => handleProductionChange('audioFadeIn', e.target.checked)}
+                          className="accent-amber-500"
+                        />
+                        Audio Fade In
+                     </label>
+                     <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={productionSettings.audioFadeOut}
+                          onChange={(e) => handleProductionChange('audioFadeOut', e.target.checked)}
+                          className="accent-amber-500"
+                        />
+                        Audio Fade Out
+                     </label>
+                  </div>
+
+                  <div className="space-y-1 border-t border-zinc-800 pt-2">
+                    <label className="text-xs text-zinc-500 flex items-center gap-1"><Volume2 size={10} /> Som Ambiente (IA Mixer)</label>
+                    <input 
+                      type="text" 
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white placeholder-zinc-600 focus:border-amber-500 focus:outline-none"
+                      placeholder="Ex: Chuva batendo no vidro, sirenes distantes..."
+                      value={productionSettings.ambientSound}
+                      onChange={(e) => handleProductionChange('ambientSound', e.target.value)}
+                    />
+                  </div>
+                </div>
+              </section>
+
               {/* Prompt */}
               <section>
                 <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2 justify-between">
                   <div className="flex items-center gap-2">
                     <span className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-400">
-                      {isExtensionMode ? '+' : '3'}
+                      {isExtensionMode ? '+' : '4'}
                     </span>
                     {isExtensionMode ? 'Continuação da Cena' : 'Roteiro da Cena'}
                   </div>
