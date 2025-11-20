@@ -290,8 +290,6 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
                   <button onClick={() => setStep('TEST_KEY')} className="text-zinc-500 hover:text-amber-500 text-xs flex items-center gap-2 transition-colors">
                      <Key size={12} /> Testar CineGenesis AI com Chave Própria
                   </button>
-                  {/* Texto de validação solicitado */}
-                  <p className="text-[10px] text-zinc-700 font-mono mt-2">Teste de validação de API Mercado Pago: R$ 1,93</p>
               </div>
             </div>
           )}
