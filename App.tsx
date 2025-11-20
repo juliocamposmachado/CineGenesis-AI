@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import SafetyModal from './components/SafetyModal';
 import { UploadedImage, AppStatus } from './types';
@@ -18,7 +18,15 @@ const App: React.FC = () => {
   const [userApiKey, setUserApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
 
+  // Splash Screen State
+  const [showSplash, setShowSplash] = useState(true);
+
   useEffect(() => {
+    // Splash Screen Timer
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 4000);
+
     // Check local storage for API Key
     const storedKey = localStorage.getItem('gemini_api_key');
     if (storedKey) {
@@ -27,6 +35,8 @@ const App: React.FC = () => {
 
     // Initial environment check
     checkApiKey().catch(console.error);
+
+    return () => clearTimeout(timer);
   }, []);
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,8 +98,63 @@ const App: React.FC = () => {
     }
   };
 
+  // Social Links Component
+  const SocialLinks = () => (
+    <div className="flex gap-4 items-center justify-center flex-wrap">
+      <a href="https://www.linkedin.com/in/juliocamposmachado/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-amber-500 transition-colors"><Linkedin size={20} /></a>
+      <a href="https://github.com/juliocamposmachado" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-amber-500 transition-colors"><Github size={20} /></a>
+      <a href="https://x.com/julioscouter" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-amber-500 transition-colors"><Twitter size={20} /></a>
+      <a href="https://www.facebook.com/juliocamposmachado/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-amber-500 transition-colors"><Facebook size={20} /></a>
+      <a href="https://likelook.wixsite.com/solutions" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-amber-500 transition-colors"><Globe size={20} /></a>
+    </div>
+  );
+
+  // Splash Screen
+  if (showSplash) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-6 text-center animate-out fade-out duration-1000 delay-[3500ms] fill-mode-forwards">
+        <div className="mb-8 animate-pulse">
+          <div className="p-6 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-2xl shadow-orange-900/50 inline-block mb-6">
+            <Clapperboard className="text-white w-16 h-16" />
+          </div>
+          <h1 className="font-cinema text-4xl md:text-6xl font-bold text-white tracking-wide mb-2">CineGenesis AI</h1>
+          <p className="text-amber-500 uppercase tracking-[0.4em] text-sm">Cinematic Video Generator</p>
+        </div>
+        
+        <div className="space-y-4 max-w-md w-full bg-zinc-900/50 p-6 rounded-xl border border-zinc-800 backdrop-blur-sm">
+          <div>
+            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Desenvolvido por</p>
+            <h2 className="text-xl font-bold text-white">Julio Campos Machado</h2>
+            <p className="text-amber-500 font-cinema">Like Look Solutions</p>
+          </div>
+          
+          <div className="h-px bg-zinc-800 w-full my-4"></div>
+          
+          <div className="flex flex-col gap-2 text-sm text-zinc-400">
+            <div className="flex items-center justify-center gap-2">
+              <Phone size={14} className="text-amber-500" />
+              <span>+55 11 99294-6628</span>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <Phone size={14} className="text-amber-500" />
+              <span>+55 11 97060-3441</span>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <Phone size={14} className="text-amber-500" />
+              <span>+55 11 3680-8030</span>
+            </div>
+          </div>
+
+          <div className="pt-4 mt-4 border-t border-zinc-800">
+            <SocialLinks />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-black text-zinc-200 selection:bg-amber-500/30">
+    <div className="min-h-screen bg-black text-zinc-200 selection:bg-amber-500/30 flex flex-col">
       {!disclaimerAccepted && <SafetyModal onAccept={() => setDisclaimerAccepted(true)} />}
 
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-40">
@@ -110,7 +175,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-12">
+      <main className="max-w-6xl mx-auto px-6 py-12 flex-grow w-full">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           
           {/* Left Column: Inputs */}
@@ -276,6 +341,27 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
+
+      <footer className="border-t border-zinc-900 bg-zinc-950 py-8 mt-8">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="text-center md:text-left">
+            <p className="text-amber-500 font-cinema font-bold text-lg">Like Look Solutions</p>
+            <p className="text-zinc-500 text-xs mt-1">Desenvolvedor Full Stack: <span className="text-zinc-300">Julio Campos Machado</span></p>
+            <div className="flex flex-wrap gap-3 text-[10px] text-zinc-600 mt-2 justify-center md:justify-start">
+              <span>+55 11 99294-6628</span>
+              <span>•</span>
+              <span>+55 11 97060-3441</span>
+              <span>•</span>
+              <span>+55 11 3680-8030</span>
+            </div>
+          </div>
+          
+          <SocialLinks />
+        </div>
+        <div className="text-center text-[10px] text-zinc-700 mt-6">
+          &copy; {new Date().getFullYear()} CineGenesis AI. Todos os direitos reservados.
+        </div>
+      </footer>
     </div>
   );
 };
