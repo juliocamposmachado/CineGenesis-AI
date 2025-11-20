@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import SafetyModal from './components/SafetyModal';
 import { UploadedImage, AppStatus, VoiceSettings, LibraryItem } from './types';
@@ -252,6 +252,7 @@ const App: React.FC = () => {
   // Social Links
   const SocialLinks = () => (
     <div className="flex gap-4 items-center justify-center flex-wrap">
+      <a href="https://linktr.ee/juliette.psicose" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 transition-colors" title="Ler Livros (Linktree)"><BookOpen size={20} /></a>
       <a href="https://www.linkedin.com/in/juliocamposmachado/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-amber-500 transition-colors"><Linkedin size={20} /></a>
       <a href="https://github.com/juliocamposmachado" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-amber-500 transition-colors"><Github size={20} /></a>
       <a href="https://x.com/julioscouter" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-amber-500 transition-colors"><Twitter size={20} /></a>
@@ -275,20 +276,28 @@ const App: React.FC = () => {
           <div>
             <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Autor & Desenvolvedor</p>
             <h2 className="text-xl font-bold text-white">Julio Campos Machado</h2>
-            <p className="text-amber-500 font-cinema text-sm mt-1">+100 Livros Publicados na Amazon</p>
+            <a 
+              href="https://linktr.ee/juliette.psicose"
+              target="_blank"
+              rel="noopener noreferrer" 
+              className="text-amber-500 font-cinema text-sm mt-1 hover:text-amber-400 transition-colors flex items-center justify-center gap-2 pointer-events-auto"
+            >
+               <BookOpen size={16} />
+               Acessar Livros da Série (Linktree)
+            </a>
           </div>
           <div className="h-px bg-zinc-800 w-full my-4"></div>
           <div className="flex flex-col gap-3 text-sm text-zinc-400">
-             <div className="flex items-center justify-center gap-2 hover:text-white transition-colors">
+             <div className="flex items-center justify-center gap-2 hover:text-white transition-colors pointer-events-auto">
               <Phone size={14} className="text-amber-500" />
               <span>+55 11 99294-6628</span>
             </div>
-            <div className="flex items-center justify-center gap-2 hover:text-white transition-colors">
+            <div className="flex items-center justify-center gap-2 hover:text-white transition-colors pointer-events-auto">
               <Phone size={14} className="text-amber-500" />
               <span>+55 11 97060-3441</span>
             </div>
           </div>
-          <div className="pt-4 mt-4 border-t border-zinc-800">
+          <div className="pt-4 mt-4 border-t border-zinc-800 pointer-events-auto">
             <SocialLinks />
           </div>
         </div>
