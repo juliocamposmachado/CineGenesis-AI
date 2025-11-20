@@ -7,8 +7,12 @@ interface AuthGateProps {
   onSetApiKey?: (key: string) => void;
 }
 
-// Credenciais (Produção)
+// Credenciais Mercado Pago (Fornecidas pelo Usuário)
+const MP_PUBLIC_KEY = 'APP_USR-7738c385-29b0-41c1-a9ee-7cacf4c35749';
 const MP_ACCESS_TOKEN = 'APP_USR-8847529597252337-112002-b8fc04b196ea64fb73cf0cb2d8ae09db-29008060';
+const MP_CLIENT_ID = '8847529597252337';
+
+// Credenciais Admin
 const ADMIN_EMAILS = ['juliocamposmachado@gmail.com', 'radiotatuapefm@gmail.com'];
 const ADMIN_PASS = 'Julio78451200';
 
@@ -61,7 +65,7 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
 
       if (!response.ok) {
          // Se falhar (CORS ou Auth), assumimos que não tem pagamento para mostrar a oferta (Fallback seguro)
-         console.warn("Falha ao verificar API MP (Provável CORS). Mostrando oferta.");
+         console.warn("Falha ao verificar API MP (Provável CORS ou Auth). Mostrando oferta.");
          setStep('OFFER');
          setLoading(false);
          return;
@@ -117,7 +121,7 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
         items: [
           {
             title: 'CineGenesis AI - Acesso Vitalício (Promoção)',
-            description: 'Acesso completo à ferramenta de criação de vídeo.',
+            description: 'Acesso completo à ferramenta de criação de vídeo para Juliette Psicose.',
             quantity: 1,
             currency_id: 'BRL',
             unit_price: 2.50
@@ -145,7 +149,7 @@ const AuthGate: React.FC<AuthGateProps> = ({ onLogin, onSetApiKey }) => {
 
       if (response.ok) {
         const data = await response.json();
-        // Redirecionar para o Sandbox ou Produção (init_point)
+        // Redirecionar para o Checkout (Sandbox ou Produção)
         window.location.href = data.init_point; 
       } else {
         throw new Error("Falha ao criar link de pagamento");
