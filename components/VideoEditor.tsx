@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Play, Pause, Download, Scissors, Plus, Trash2, Layers, Music, Film, Save, Wand2, Library, X, Eye, Volume2, FileAudio } from 'lucide-react';
+import { Play, Pause, Download, Scissors, Plus, Trash2, Layers, Music, Film, Save, Wand2, Library, X, Eye, Volume2, FileAudio, Camera } from 'lucide-react';
 import { TimelineClip, LibraryItem } from '../types';
 
 interface VideoEditorProps {
@@ -19,6 +19,13 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [previewClipMode, setPreviewClipMode] = useState(false);
   
+  // Resizing State
+  const [viewerHeight, setViewerHeight] = useState(60); // vh
+  const [isResizing, setIsResizing] = useState(false);
+  
+  // Thumbnails State
+  const [thumbnails, setThumbnails] = useState<Map<string, string>>(new Map());
+
   // Loading State
   const [loadingResources, setLoadingResources] = useState<Set<string>>(new Set());
 
@@ -50,6 +57,40 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
     };
   }, []);
 
+  // Generate Thumbnail Helper
+  const generateThumbnail = (clip: TimelineClip, el: HTMLVideoElement | HTMLImageElement) => {
+    if (thumbnails.has(clip.id)) return;
+
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 160; // Thumbnail width
+      canvas.height = 90;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        if (el instanceof HTMLVideoElement) {
+           // Wait for ready state if needed or draw if ready
+           if(el.readyState >= 2) {
+              ctx.drawImage(el, 0, 0, canvas.width, canvas.height);
+              setThumbnails(prev => new Map(prev).set(clip.id, canvas.toDataURL()));
+           } else {
+              const onSeek = () => {
+                 ctx.drawImage(el, 0, 0, canvas.width, canvas.height);
+                 setThumbnails(prev => new Map(prev).set(clip.id, canvas.toDataURL()));
+                 el.removeEventListener('seeked', onSeek);
+              };
+              el.addEventListener('seeked', onSeek);
+              el.currentTime = 0.5; // Capture at 0.5s
+           }
+        } else {
+           ctx.drawImage(el, 0, 0, canvas.width, canvas.height);
+           setThumbnails(prev => new Map(prev).set(clip.id, canvas.toDataURL()));
+        }
+      }
+    } catch (e) {
+      console.warn("Thumbnail gen failed", e);
+    }
+  };
+
   // Initialize Media Elements & Audio Graph when clips change
   useEffect(() => {
     if (!audioContextRef.current || !audioDestRef.current) return;
@@ -67,6 +108,10 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
               newSet.delete(clip.id);
               return newSet;
            });
+           // Try generating thumbnail
+           if (clip.type !== 'AUDIO') {
+             generateThumbnail(clip, el as HTMLVideoElement | HTMLImageElement);
+           }
         };
 
         const handleWaiting = () => {
@@ -95,6 +140,8 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
           el = new Image();
           el.src = clip.src;
           el.crossOrigin = "anonymous";
+          // Image loads instantly usually, but trigger thumb gen
+          el.onload = () => generateThumbnail(clip, el as HTMLImageElement);
         }
         mediaElementsRef.current.set(clip.id, el);
 
@@ -323,6 +370,14 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
       setTimeout(() => setIsPlaying(true), 100);
   };
 
+  const handleSaveFrame = () => {
+    if (!canvasRef.current) return;
+    const link = document.createElement('a');
+    link.download = `cinegenesis_frame_${Date.now()}.png`;
+    link.href = canvasRef.current.toDataURL('image/png');
+    link.click();
+  };
+
   const handleExport = () => {
     setExporting(true);
     setIsPlaying(false);
@@ -422,6 +477,25 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
     setShowLibraryModal(false);
   };
 
+  // Resizing Handlers
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newHeight = (e.clientY / window.innerHeight) * 100;
+      setViewerHeight(Math.max(30, Math.min(newHeight, 85)));
+    };
+    const handleMouseUp = () => setIsResizing(false);
+    
+    if (isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
   return (
     <div className="flex flex-col h-full gap-4 relative">
       
@@ -461,13 +535,24 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
       )}
 
       {/* --- VIEWER --- */}
-      <div className="flex-1 bg-black rounded-xl border border-zinc-800 relative flex items-center justify-center overflow-hidden bg-[url('https://transparenttextures.com/patterns/carbon-fibre.png')]">
+      <div 
+        className="bg-black rounded-xl border border-zinc-800 relative flex items-center justify-center overflow-hidden bg-[url('https://transparenttextures.com/patterns/carbon-fibre.png')] flex-shrink-0"
+        style={{ height: `${viewerHeight}vh`, minHeight: '300px' }}
+      >
         <canvas 
           ref={canvasRef} 
           width={1280} 
           height={720} 
-          className="max-w-full max-h-[60vh] aspect-video shadow-2xl border border-zinc-900"
+          className="max-w-full max-h-full aspect-video shadow-2xl border border-zinc-900"
         />
+        
+        {/* Resize Handle */}
+        <div 
+          className="absolute bottom-0 left-0 right-0 h-4 bg-zinc-800/50 hover:bg-amber-500/50 cursor-row-resize flex items-center justify-center transition-colors z-50"
+          onMouseDown={() => setIsResizing(true)}
+        >
+           <div className="w-12 h-1 bg-zinc-500 rounded-full"></div>
+        </div>
         
         {/* Loading Overlay */}
         {loadingResources.size > 0 && (
@@ -487,7 +572,7 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
       </div>
 
       {/* --- PREMIUM CONTROLS --- */}
-      <div className="h-20 bg-zinc-950 border-t border-zinc-800 flex items-center px-6 justify-between backdrop-blur-sm bg-opacity-90">
+      <div className="h-20 bg-zinc-950 border-t border-zinc-800 flex items-center px-6 justify-between backdrop-blur-sm bg-opacity-90 flex-shrink-0">
         <div className="flex items-center gap-6">
            {/* Play/Pause with Glow */}
            <button onClick={togglePlay} className={`p-4 rounded-full text-white transition-all shadow-xl transform hover:scale-105 ${isPlaying ? 'bg-gradient-to-r from-amber-600 to-orange-600 shadow-amber-500/20' : 'bg-zinc-800 hover:bg-zinc-700 border border-zinc-700'}`}>
@@ -525,6 +610,12 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
            </label>
 
            <div className="h-8 w-px bg-zinc-800 mx-2"></div>
+           
+           {/* Save Frame */}
+           <button onClick={handleSaveFrame} className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-lg border border-zinc-700 hover:border-zinc-600 shadow-lg flex items-center gap-2 transition-all" title="Salvar Frame PNG">
+              <Camera size={18} />
+              <span className="hidden md:inline text-xs uppercase tracking-wide">Frame</span>
+           </button>
 
            {/* Export */}
            <button onClick={handleExport} disabled={exporting} className="px-6 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold rounded-lg shadow-lg shadow-amber-900/20 flex items-center gap-2 transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
@@ -535,7 +626,7 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
       </div>
 
       {/* --- TIMELINE TRACKS --- */}
-      <div className="h-64 bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 overflow-y-auto overflow-x-hidden">
+      <div className="flex-1 bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 overflow-y-auto overflow-x-hidden custom-scrollbar min-h-[150px]">
         <div className="relative min-h-full" style={{ width: '100%' }}>
            {/* Time Ruler */}
            <div className="h-6 border-b border-zinc-700 mb-2 flex text-[10px] text-zinc-500 select-none">
@@ -549,31 +640,37 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
              const isSelected = selectedClipId === clip.id;
              const widthPct = (clip.duration / totalDuration) * 100;
              const leftPct = (clip.startOffset / totalDuration) * 100;
+             const thumbUrl = thumbnails.get(clip.id);
              
              return (
                <div key={clip.id} className="mb-2 relative group">
                  <div 
-                    className={`h-12 rounded-lg border-2 flex items-center px-3 cursor-pointer relative overflow-hidden transition-all
-                      ${isSelected ? 'border-amber-500 bg-zinc-800' : 'border-zinc-700 bg-zinc-900'}
-                      ${clip.type === 'AUDIO' ? 'bg-green-900/20 border-green-800/50' : ''}
+                    className={`h-16 rounded-lg border-2 flex items-center px-3 cursor-pointer relative overflow-hidden transition-all bg-cover bg-center
+                      ${isSelected ? 'border-amber-500' : 'border-zinc-700'}
+                      ${clip.type === 'AUDIO' ? 'bg-green-900/20 border-green-800/50' : 'bg-zinc-900'}
                     `}
                     style={{ 
                       width: `${widthPct}%`, 
-                      marginLeft: `${leftPct}%` 
+                      marginLeft: `${leftPct}%`,
+                      backgroundImage: clip.type !== 'AUDIO' && thumbUrl ? `url(${thumbUrl})` : 'none'
                     }}
                     onClick={() => {
                         setSelectedClipId(clip.id);
                         setCurrentTime(clip.startOffset); 
                     }}
                  >
-                    {clip.type === 'VIDEO' && <Film size={16} className="text-blue-400 mr-2" />}
-                    {clip.type === 'AUDIO' && <FileAudio size={16} className="text-green-400 mr-2" />}
-                    {clip.type === 'IMAGE' && <Layers size={16} className="text-purple-400 mr-2" />}
-                    <span className="text-xs text-white truncate">{clip.name}</span>
+                    <div className="absolute inset-0 bg-black/50 group-hover:bg-black/30 transition-colors"></div>
+                    
+                    <div className="relative z-10 flex items-center">
+                       {clip.type === 'VIDEO' && <Film size={16} className="text-blue-400 mr-2 drop-shadow-md" />}
+                       {clip.type === 'AUDIO' && <FileAudio size={16} className="text-green-400 mr-2 drop-shadow-md" />}
+                       {clip.type === 'IMAGE' && <Layers size={16} className="text-purple-400 mr-2 drop-shadow-md" />}
+                       <span className="text-xs text-white truncate font-bold drop-shadow-md">{clip.name}</span>
+                    </div>
                     
                     {isSelected && (
-                       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                          <button onClick={(e) => { e.stopPropagation(); deleteClip(clip.id); }} className="p-1 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white">
+                       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 z-20">
+                          <button onClick={(e) => { e.stopPropagation(); deleteClip(clip.id); }} className="p-1 bg-red-500/80 text-white rounded hover:bg-red-600 shadow-sm">
                              <Trash2 size={12} />
                           </button>
                        </div>
@@ -584,7 +681,7 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
            })}
            
            {/* Playhead */}
-           <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none" style={{ left: `${(currentTime / totalDuration) * 100}%` }} />
+           <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none shadow-[0_0_10px_rgba(239,68,68,0.8)]" style={{ left: `${(currentTime / totalDuration) * 100}%` }} />
         </div>
       </div>
 
@@ -592,7 +689,7 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, li
       {selectedClipId && clips.find(c => c.id === selectedClipId) && (() => {
           const clip = clips.find(c => c.id === selectedClipId)!;
           return (
-            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl grid grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-2">
+            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl grid grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-2 flex-shrink-0">
                 <div className="col-span-4 flex items-center justify-between">
                     <div className="text-xs font-bold text-zinc-500 uppercase">Propriedades: <span className="text-white">{clip.name}</span></div>
                     <button onClick={previewSelectedClip} className="text-xs flex items-center gap-2 bg-zinc-800 hover:bg-amber-900 hover:text-amber-500 px-3 py-1 rounded transition-colors text-zinc-300">
