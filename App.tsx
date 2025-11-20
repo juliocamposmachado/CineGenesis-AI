@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera, ArrowRightCircle, Scissors } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film, Mic2, Library, Trash2, Save, Download, Link as LinkIcon, Sliders, Volume2, SunMoon, Clock, Calendar, Image as ImageIcon, FileText, Camera, ArrowRightCircle, Scissors, Layers } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import AudioUploader from './components/AudioUploader';
 import VideoEditor from './components/VideoEditor'; // NEW
@@ -371,6 +371,7 @@ const App: React.FC = () => {
       <a href="https://x.com/julioscouter" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-amber-500 transition-colors"><Twitter size={20} /></a>
       <a href="https://www.facebook.com/juliocamposmachado/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-amber-500 transition-colors"><Facebook size={20} /></a>
       <a href="https://likelook.wixsite.com/solutions" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-amber-500 transition-colors"><Globe size={20} /></a>
+      <a href="https://stackoverflow.com/users/20979692/like-look-solutions?tab=profile" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-amber-500 transition-colors" title="StackOverflow (Like Look Solutions)"><Layers size={20} /></a>
     </div>
   );
 
