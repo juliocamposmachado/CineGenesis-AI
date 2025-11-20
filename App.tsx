@@ -265,7 +265,7 @@ const App: React.FC = () => {
                   onRemove={() => setImages(prev => ({ ...prev, A: null }))}
                 />
                 <ImageUploader 
-                  label="Coadjuvante/Antagonista" 
+                  label="Antagonista" 
                   image={images.B} 
                   onUpload={(f) => handleImageUpload(f, 'B')}
                   onRemove={() => setImages(prev => ({ ...prev, B: null }))}
