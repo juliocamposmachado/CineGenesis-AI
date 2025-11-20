@@ -20,3 +20,18 @@ export interface VideoResult {
   videoAsset: any; // The internal Google GenAI video object needed for extension
   promptUsed: string;
 }
+
+export interface VoiceSettings {
+  characterA: string; // Voice description for Protagonist
+  characterB: string; // Voice description for Antagonist
+}
+
+export interface LibraryItem {
+  id: string;
+  timestamp: number;
+  prompt: string;
+  videoBlob: Blob; // Stored in IndexedDB
+  videoUrl: string; // Generated URL for display
+  voiceSettings: VoiceSettings;
+  type: 'SCENE' | 'EXTENSION';
+}

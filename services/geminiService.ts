@@ -1,5 +1,5 @@
 import { GoogleGenAI, VideoGenerationReferenceImage, VideoGenerationReferenceType } from "@google/genai";
-import { UploadedImage } from "../types";
+import { UploadedImage, VoiceSettings } from "../types";
 
 // Helper to check/request API key via AI Studio extension
 export const checkApiKey = async (): Promise<boolean> => {
@@ -84,16 +84,27 @@ export const generateCinematicVideo = async (
   images: UploadedImage[], 
   userPrompt: string, 
   archetypeDescription: string,
+  voiceSettings: VoiceSettings,
   apiKey?: string
-): Promise<{ videoUrl: string, videoAsset: any }> => {
+): Promise<{ videoUrl: string, videoAsset: any, blob: Blob }> => {
   const effectiveKey = apiKey || process.env.API_KEY;
   const ai = new GoogleGenAI({ apiKey: effectiveKey });
 
+  // Construct Voice Context
+  const voiceContext = `
+    DIREÇÃO DE ÁUDIO (Audio Consistency):
+    - Voz Personagem A (Protagonista): ${voiceSettings.characterA || "Natural, cinematográfica"}
+    - Voz Personagem B (Antagonista): ${voiceSettings.characterB || "Natural, cinematográfica"}
+    - O áudio deve ser de alta fidelidade, sincronizado com a emoção facial.
+  `.trim();
+
   const fullPrompt = `
-    Gere um vídeo cinematográfico fotorrealista (4k, texturas de pele reais).
+    Gere um vídeo cinematográfico fotorrealista com áudio (4k).
     
     PERSONAGENS (Visual Reference):
     ${archetypeDescription}
+    
+    ${voiceContext}
     
     CENA (Action):
     ${userPrompt}
@@ -110,7 +121,7 @@ export const generateCinematicVideo = async (
   }));
 
   try {
-    console.log("Tentativa 1: Usando Imagens de Referência...");
+    console.log("Tentativa 1: Usando Imagens de Referência e Voz...");
     
     let initialOp = await ai.models.generateVideos({
       model: 'veo-3.1-generate-preview',
@@ -134,11 +145,13 @@ export const generateCinematicVideo = async (
       console.warn("Bloqueio de Imagem detectado (Provável Celebridade). Iniciando Fallback via Texto...");
       
       const fallbackPrompt = `
-        Crie um vídeo cinematográfico realista.
+        Crie um vídeo cinematográfico realista com áudio.
         
         IMPORTANTE: Crie personagens originais que correspondam a esta descrição física exata:
         ${archetypeDescription}
         
+        ${voiceContext}
+
         AÇÃO: ${userPrompt}
         
         ESTILO: Cinematografia de alta qualidade, 35mm, Drama, Suspense.
@@ -180,7 +193,8 @@ export const generateCinematicVideo = async (
     const blob = await response.blob();
     return {
       videoUrl: URL.createObjectURL(blob),
-      videoAsset: generatedVideo?.video // Return the asset for future extensions
+      videoAsset: generatedVideo?.video, // Return the asset for future extensions
+      blob: blob
     };
 
   } catch (error: any) {
@@ -191,13 +205,14 @@ export const generateCinematicVideo = async (
 
 /**
  * Step 3: Extend the video
- * Uses the previous video asset to ensure 100% consistency of characters.
+ * Uses the previous video asset to ensure 100% consistency of characters AND voice.
  */
 export const extendCinematicVideo = async (
   previousVideoAsset: any,
   newPrompt: string,
+  voiceSettings: VoiceSettings,
   apiKey?: string
-): Promise<{ videoUrl: string, videoAsset: any }> => {
+): Promise<{ videoUrl: string, videoAsset: any, blob: Blob }> => {
   const effectiveKey = apiKey || process.env.API_KEY;
   const ai = new GoogleGenAI({ apiKey: effectiveKey });
 
@@ -205,13 +220,19 @@ export const extendCinematicVideo = async (
     throw new Error("Nenhum vídeo anterior encontrado para estender.");
   }
 
+  const voiceContext = `
+    Mantenha a consistência total da voz:
+    - A: ${voiceSettings.characterA}
+    - B: ${voiceSettings.characterB}
+  `.trim();
+
   try {
-    console.log("Iniciando extensão de vídeo...");
+    console.log("Iniciando extensão de vídeo com consistência vocal...");
     
     // Veo extension request
     let initialOp = await ai.models.generateVideos({
       model: 'veo-3.1-generate-preview',
-      prompt: newPrompt + " (Mantenha a consistência visual exata e continuidade da ação)",
+      prompt: `${newPrompt}. ${voiceContext}. (Mantenha a consistência visual exata e continuidade da ação)`,
       video: previousVideoAsset, // Passing the raw asset guarantees continuity
       config: {
         numberOfVideos: 1,
@@ -240,7 +261,8 @@ export const extendCinematicVideo = async (
     const blob = await response.blob();
     return {
       videoUrl: URL.createObjectURL(blob),
-      videoAsset: generatedVideo?.video
+      videoAsset: generatedVideo?.video,
+      blob: blob
     };
 
   } catch (error: any) {
