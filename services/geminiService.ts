@@ -1,10 +1,10 @@
 import { GoogleGenAI, VideoGenerationReferenceImage, VideoGenerationReferenceType } from "@google/genai";
 import { UploadedImage } from "../types";
 
-// Helper to check/request API key
+// Helper to check/request API key via AI Studio extension
 export const checkApiKey = async (): Promise<boolean> => {
   // @ts-ignore - Window extension for AI Studio
-  if (window.aistudio && window.aistudio.hasSelectedApiKey) {
+  if (typeof window !== 'undefined' && window.aistudio && window.aistudio.hasSelectedApiKey) {
      // @ts-ignore
     const hasKey = await window.aistudio.hasSelectedApiKey();
     if (!hasKey) {
@@ -15,7 +15,7 @@ export const checkApiKey = async (): Promise<boolean> => {
     }
     return true;
   }
-  return true; // Fallback for local envs where env var might be present
+  return false; // Return false if extension is not available, forcing manual key entry
 };
 
 /**
@@ -23,8 +23,10 @@ export const checkApiKey = async (): Promise<boolean> => {
  * strictly avoiding proper names to ensure the fictional character constraint.
  */
 export const analyzeArchetypes = async (images: UploadedImage[], apiKey?: string): Promise<string> => {
-  // Use user provided key or fallback to env
-  const ai = new GoogleGenAI({ apiKey: apiKey || process.env.API_KEY });
+  // Priority: User Key > Env Key > Empty (let SDK handle error or extension)
+  const effectiveKey = apiKey || process.env.API_KEY;
+  
+  const ai = new GoogleGenAI({ apiKey: effectiveKey });
   
   // Use Flash for fast multimodal analysis
   const modelId = 'gemini-2.5-flash'; 
@@ -56,7 +58,7 @@ export const analyzeArchetypes = async (images: UploadedImage[], apiKey?: string
     return response.text || "Arquétipos visuais dramáticos e cinematográficos.";
   } catch (error) {
     console.error("Error analyzing images:", error);
-    throw new Error("Falha ao analisar os arquétipos das imagens. Verifique sua chave de API.");
+    throw new Error("Falha ao analisar os arquétipos das imagens. Verifique se sua chave de API é válida.");
   }
 };
 
@@ -69,8 +71,15 @@ export const generateCinematicVideo = async (
   archetypeDescription: string,
   apiKey?: string
 ): Promise<string> => {
-  // Use user provided key or fallback to env
-  const ai = new GoogleGenAI({ apiKey: apiKey || process.env.API_KEY });
+  // Priority: User Key > Env Key
+  const effectiveKey = apiKey || process.env.API_KEY;
+  if (!effectiveKey && !process.env.API_KEY) {
+      // If no key is provided, we might rely on the browser extension injection, 
+      // but usually we need to pass something to the constructor.
+      // If in AI Studio, process.env.API_KEY is injected.
+  }
+
+  const ai = new GoogleGenAI({ apiKey: effectiveKey });
 
   // Construct a rich prompt combining user intent and safe archetype analysis
   const fullPrompt = `
@@ -93,6 +102,8 @@ export const generateCinematicVideo = async (
   }));
 
   try {
+    console.log("Starting Veo generation with prompt:", fullPrompt);
+
     // Using Veo Generate Preview (supports ref images)
     let operation = await ai.models.generateVideos({
       model: 'veo-3.1-generate-preview',
@@ -105,36 +116,67 @@ export const generateCinematicVideo = async (
       }
     });
 
+    console.log("Operation started:", operation);
+
     // Polling loop
     while (!operation.done) {
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5s
+      await new Promise(resolve => setTimeout(resolve, 6000)); // Poll every 6s
       operation = await ai.operations.getVideosOperation({ operation: operation });
+      console.log("Polling operation status...", operation.metadata);
     }
 
-    // Check for specific operation errors
+    // Check for specific operation errors (Standard API error)
     if (operation.error) {
       console.error("Veo Operation Error:", operation.error);
       const errorMsg = operation.error.message || "Erro desconhecido na operação de vídeo.";
       throw new Error(`Falha na geração do vídeo: ${errorMsg}`);
     }
 
-    const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
+    // SPECIFIC ERROR HANDLING FOR SAFETY FILTERS (RAI)
+    // @ts-ignore - Accessing dynamic response properties for safety filters
+    if (operation.response?.raiMediaFilteredReasons && operation.response.raiMediaFilteredReasons.length > 0) {
+        // @ts-ignore
+        const reason = operation.response.raiMediaFilteredReasons[0];
+        console.error("Veo Safety Filter Triggered:", reason);
+        
+        let friendlyError = `Bloqueio de Segurança: "${reason}"`;
+        
+        if (typeof reason === 'string' && reason.toLowerCase().includes("celebrity")) {
+            friendlyError = "Bloqueio de Segurança: A imagem contém semelhança com celebridades ou pessoas públicas. O Google Veo não permite gerar vídeos com pessoas famosas. Por favor, tente novamente usando imagens de pessoas desconhecidas ou geradas por IA.";
+        } else if (typeof reason === 'string' && (reason.toLowerCase().includes("safety") || reason.toLowerCase().includes("sensitive"))) {
+             friendlyError = "Bloqueio de Segurança: O conteúdo foi marcado como sensível pelos filtros da IA. Tente suavizar o prompt ou trocar as imagens de referência.";
+        }
+
+        throw new Error(friendlyError);
+    }
+
+    // Check if generatedVideos exists and has content
+    if (!operation.response?.generatedVideos || operation.response.generatedVideos.length === 0) {
+        console.error("Operation completed but no videos returned. Full Object:", JSON.stringify(operation, null, 2));
+        throw new Error("O vídeo não foi gerado e nenhum motivo específico foi retornado. Isso geralmente indica um bloqueio silencioso de segurança ou falha temporária do servidor.");
+    }
+
+    const videoUri = operation.response.generatedVideos[0]?.video?.uri;
     if (!videoUri) {
-        console.error("Operation finished but no URI:", operation);
-        throw new Error("A API concluiu o processo mas não retornou o vídeo. Isso pode ocorrer devido a filtros de segurança ou falha interna.");
+        console.error("Operation finished, video array exists, but URI is undefined:", operation);
+        throw new Error("A API concluiu o processo mas a URI do vídeo está vazia. Falha interna no processamento do arquivo.");
     }
 
     // Fetch the actual video blob using the key
-    // Note: If using a custom key, we need to append it here as well
-    const keyToUse = apiKey || process.env.API_KEY;
-    const response = await fetch(`${videoUri}&key=${keyToUse}`);
-    if (!response.ok) throw new Error("Falha ao baixar o vídeo gerado.");
+    const fetchUrl = `${videoUri}&key=${effectiveKey}`;
+    const response = await fetch(fetchUrl);
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Failed to fetch video file:", errorText);
+        throw new Error(`Falha ao baixar o arquivo de vídeo gerado (Status: ${response.status}).`);
+    }
     
     const blob = await response.blob();
     return URL.createObjectURL(blob);
 
   } catch (error: any) {
-    console.error("Video generation error:", error);
+    console.error("Video generation error stack:", error);
     // Propagate the specific error message
     throw new Error(error.message || "Erro na geração do vídeo.");
   }
