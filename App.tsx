@@ -85,7 +85,7 @@ const App: React.FC = () => {
   const [progressMsg, setProgressMsg] = useState('');
   const [isExtensionMode, setIsExtensionMode] = useState(false);
   
-  // Editor State
+  // Editor State (LIFTED UP)
   const [editorClips, setEditorClips] = useState<TimelineClip[]>([]);
 
   // Voice Consistency State
@@ -327,14 +327,14 @@ const App: React.FC = () => {
 
   // --- EDITOR INTEGRATION ---
   const handleEditFromLibrary = (item: LibraryItem) => {
-    // Convert LibraryItem to TimelineClip
+    // Create new clip
     const newClip: TimelineClip = {
-      id: Date.now().toString(),
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
       type: 'VIDEO',
       src: item.videoUrl, // Uses the Blob URL
       name: `Cena_${item.id.slice(-4)}`,
       startOffset: 0,
-      duration: 5, // Estimate, ideally we'd get this from metadata
+      duration: 5, // Estimate
       trimStart: 0,
       volume: 1,
       layer: 1,
@@ -342,7 +342,8 @@ const App: React.FC = () => {
       transitionIn: 'NONE'
     };
     
-    setEditorClips([newClip]);
+    // APPEND to existing clips instead of overwriting
+    setEditorClips(prev => [...prev, newClip]);
     setActiveTab('EDITOR');
   };
 
@@ -380,7 +381,6 @@ const App: React.FC = () => {
     if (!currentBlob) return;
 
     try {
-      // Criar um arquivo a partir do Blob para compartilhamento
       const file = new File([currentBlob], "juliette_psicose_cena.mp4", { type: "video/mp4" });
       
       const shareData = {
@@ -389,11 +389,10 @@ const App: React.FC = () => {
         files: [file]
       };
 
-      // @ts-ignore - canShare and share support check
+      // @ts-ignore
       if (navigator.canShare && navigator.canShare(shareData)) {
         await navigator.share(shareData);
       } else {
-        // Fallback para navegadores que não suportam envio de arquivos (Desktop comum)
         alert("Seu navegador não suporta compartilhamento direto do arquivo de vídeo. Por favor, use o botão 'Baixar' e compartilhe manualmente.");
       }
     } catch (err) {
@@ -677,7 +676,8 @@ const App: React.FC = () => {
               </div>
               <div className="h-[80vh]">
                  <VideoEditor 
-                    initialClips={editorClips}
+                    clips={editorClips}
+                    onClipsChange={setEditorClips}
                     library={library}
                     onSaveToLibrary={(blob, duration) => saveToLibrary(blob, null, "Edição de Vídeo Customizada", 'EDIT', duration.toFixed(2) + 's')}
                  />

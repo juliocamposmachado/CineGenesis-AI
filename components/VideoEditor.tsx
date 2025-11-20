@@ -1,31 +1,30 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Play, Pause, Download, Scissors, Plus, Trash2, Layers, Music, Film, Save, Wand2, Library, X } from 'lucide-react';
+import { Play, Pause, Download, Scissors, Plus, Trash2, Layers, Music, Film, Save, Wand2, Library, X, Eye } from 'lucide-react';
 import { TimelineClip, LibraryItem } from '../types';
 
 interface VideoEditorProps {
-  initialClips?: TimelineClip[];
-  library?: LibraryItem[]; // Added library prop
+  clips: TimelineClip[];
+  onClipsChange: (clips: TimelineClip[]) => void;
+  library?: LibraryItem[];
   onSaveToLibrary: (blob: Blob, duration: number) => void;
 }
 
-const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = [], onSaveToLibrary }) => {
+const VideoEditor: React.FC<VideoEditorProps> = ({ clips = [], onClipsChange, library = [], onSaveToLibrary }) => {
   // State
-  const [clips, setClips] = useState<TimelineClip[]>(initialClips);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [totalDuration, setTotalDuration] = useState(10); // Default 10s
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [previewClipMode, setPreviewClipMode] = useState(false); // Mode to loop single clip
 
   // Refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
   const startTimeRef = useRef<number>(0);
   const mediaElementsRef = useRef<Map<string, HTMLVideoElement | HTMLAudioElement | HTMLImageElement>>(new Map());
-  const streamRef = useRef<MediaStream | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-
+  
   // Initialize Media Elements when clips change
   useEffect(() => {
     clips.forEach(clip => {
@@ -35,7 +34,7 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
         if (clip.type === 'VIDEO') {
           el = document.createElement('video');
           el.src = clip.src;
-          (el as HTMLVideoElement).muted = true; // Mute to handle audio via Web Audio API later (or simplistic logic for now)
+          (el as HTMLVideoElement).muted = true; // Mute to handle audio via Web Audio API later
           (el as HTMLVideoElement).load();
         } else if (clip.type === 'AUDIO') {
           el = document.createElement('audio');
@@ -55,8 +54,10 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
     });
 
     // Calc total duration
-    const maxDur = Math.max(...clips.map(c => c.startOffset + c.duration), 10);
-    setTotalDuration(maxDur);
+    if (clips.length > 0) {
+      const maxDur = Math.max(...clips.map(c => c.startOffset + c.duration), 10);
+      setTotalDuration(maxDur);
+    }
 
   }, [clips]);
 
@@ -73,7 +74,11 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
 
     // 2. Sort clips by layer
     const activeClips = clips
-      .filter(c => currentTime >= c.startOffset && currentTime < c.startOffset + c.duration)
+      .filter(c => {
+        // If previewing specific clip, only show that one
+        if (previewClipMode && selectedClipId) return c.id === selectedClipId;
+        return currentTime >= c.startOffset && currentTime < c.startOffset + c.duration;
+      })
       .sort((a, b) => a.layer - b.layer);
 
     // 3. Draw
@@ -82,20 +87,33 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
       if (!el) return;
 
       // Calculate local time within the clip
-      const clipLocalTime = currentTime - clip.startOffset + clip.trimStart;
+      // If previewMode, currentTime is relative to 0 for the clip duration
+      let clipLocalTime;
+      
+      if (previewClipMode) {
+         clipLocalTime = currentTime + clip.trimStart;
+      } else {
+         clipLocalTime = currentTime - clip.startOffset + clip.trimStart;
+      }
 
       // Sync Video
       if (clip.type === 'VIDEO' && el instanceof HTMLVideoElement) {
-        if (Math.abs(el.currentTime - clipLocalTime) > 0.3) {
+        if (Number.isFinite(clipLocalTime) && Math.abs(el.currentTime - clipLocalTime) > 0.2) {
            el.currentTime = clipLocalTime;
         }
+        
         // Simple crossfade logic
         let alpha = clip.opacity;
-        if (clip.transitionIn === 'FADE' && (currentTime - clip.startOffset) < 1) {
+        if (!previewClipMode && clip.transitionIn === 'FADE' && (currentTime - clip.startOffset) < 1) {
             alpha = (currentTime - clip.startOffset); // Fade in over 1s
         }
+        
         ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-        ctx.drawImage(el, 0, 0, canvas.width, canvas.height);
+        
+        // Safe draw
+        if (el.readyState >= 2) {
+            ctx.drawImage(el, 0, 0, canvas.width, canvas.height);
+        }
         ctx.globalAlpha = 1.0;
       }
 
@@ -110,9 +128,17 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
       const now = performance.now();
       const deltaTime = (now - startTimeRef.current) / 1000;
       
-      if (deltaTime >= totalDuration) {
+      // Handle End of Playback
+      let maxTime = totalDuration;
+      if (previewClipMode && selectedClipId) {
+         const clip = clips.find(c => c.id === selectedClipId);
+         maxTime = clip ? clip.duration : 5;
+      }
+
+      if (deltaTime >= maxTime) {
         setIsPlaying(false);
-        setCurrentTime(0);
+        setCurrentTime(0); // Reset
+        setPreviewClipMode(false); // Exit preview mode automatically
       } else {
         setCurrentTime(deltaTime);
         requestRef.current = requestAnimationFrame(renderFrame);
@@ -125,7 +151,7 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
     if (!isPlaying) {
        renderFrame(); // Draw static frame on scrub
     }
-  }, [currentTime, clips]);
+  }, [currentTime, clips, selectedClipId]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -137,12 +163,29 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
     return () => cancelAnimationFrame(requestRef.current);
   }, [isPlaying]);
 
-  const togglePlay = () => setIsPlaying(!isPlaying);
+  const togglePlay = () => {
+      setPreviewClipMode(false);
+      setIsPlaying(!isPlaying);
+  };
+
+  const previewSelectedClip = () => {
+      if (!selectedClipId) return;
+      const clip = clips.find(c => c.id === selectedClipId);
+      if (!clip) return;
+
+      setIsPlaying(false);
+      setPreviewClipMode(true);
+      setCurrentTime(0);
+      setTimeout(() => {
+          setIsPlaying(true);
+      }, 100);
+  };
 
   const handleExport = () => {
     setExporting(true);
     setIsPlaying(false);
     setCurrentTime(0);
+    setPreviewClipMode(false);
     
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -175,11 +218,11 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
   };
 
   const updateClip = (id: string, changes: Partial<TimelineClip>) => {
-    setClips(prev => prev.map(c => c.id === id ? { ...c, ...changes } : c));
+    onClipsChange(clips.map(c => c.id === id ? { ...c, ...changes } : c));
   };
 
   const deleteClip = (id: string) => {
-    setClips(prev => prev.filter(c => c.id !== id));
+    onClipsChange(clips.filter(c => c.id !== id));
     if (selectedClipId === id) setSelectedClipId(null);
   };
 
@@ -190,7 +233,7 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
       const isAudio = file.type.startsWith('audio');
       
       const newClip: TimelineClip = {
-        id: Date.now().toString(),
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         type: isVideo ? 'VIDEO' : isAudio ? 'AUDIO' : 'IMAGE',
         src: URL.createObjectURL(file),
         name: file.name,
@@ -202,13 +245,14 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
         opacity: 1,
         transitionIn: 'NONE'
       };
-      setClips([...clips, newClip]);
+      onClipsChange([...clips, newClip]);
+      setSelectedClipId(newClip.id);
     }
   };
 
   const handleImportFromLibrary = (item: LibraryItem) => {
     const newClip: TimelineClip = {
-      id: Date.now().toString(),
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
       type: 'VIDEO',
       src: item.videoUrl,
       name: item.prompt.slice(0, 20) + "...",
@@ -220,7 +264,12 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
       opacity: 1,
       transitionIn: 'NONE'
     };
-    setClips([...clips, newClip]);
+    onClipsChange([...clips, newClip]);
+    setSelectedClipId(newClip.id);
+    
+    // Auto seek to show the imported clip
+    setCurrentTime(currentTime);
+    
     setShowLibraryModal(false);
   };
 
@@ -264,12 +313,12 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
       )}
 
       {/* --- VIEWER --- */}
-      <div className="flex-1 bg-black rounded-xl border border-zinc-800 relative flex items-center justify-center overflow-hidden">
+      <div className="flex-1 bg-black rounded-xl border border-zinc-800 relative flex items-center justify-center overflow-hidden bg-[url('https://transparenttextures.com/patterns/carbon-fibre.png')]">
         <canvas 
           ref={canvasRef} 
           width={1280} 
           height={720} 
-          className="max-w-full max-h-[60vh] aspect-video shadow-2xl"
+          className="max-w-full max-h-[60vh] aspect-video shadow-2xl border border-zinc-900"
         />
         
         {exporting && (
@@ -279,12 +328,18 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
               <p className="text-zinc-400 text-sm">Aguarde, estamos processando o vídeo final.</p>
            </div>
         )}
+
+        {previewClipMode && (
+           <div className="absolute top-4 right-4 bg-red-600 text-white text-xs px-3 py-1 rounded-full font-bold animate-pulse uppercase tracking-wider">
+              Visualizando Clipe Isolado
+           </div>
+        )}
       </div>
 
       {/* --- TIMELINE CONTROLS --- */}
       <div className="h-16 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center px-4 justify-between">
         <div className="flex items-center gap-4">
-           <button onClick={togglePlay} className="p-3 bg-amber-600 hover:bg-amber-500 rounded-full text-white transition-colors">
+           <button onClick={togglePlay} className={`p-3 rounded-full text-white transition-colors ${isPlaying ? 'bg-amber-600 hover:bg-amber-500' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
              {isPlaying ? <Pause size={20} /> : <Play size={20} />}
            </button>
            <span className="font-mono text-amber-500 text-sm">
@@ -310,9 +365,9 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
       <div className="h-64 bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 overflow-y-auto overflow-x-hidden">
         <div className="relative min-h-full" style={{ width: '100%' }}>
            {/* Time Ruler */}
-           <div className="h-6 border-b border-zinc-700 mb-2 flex text-[10px] text-zinc-500">
+           <div className="h-6 border-b border-zinc-700 mb-2 flex text-[10px] text-zinc-500 select-none">
               {Array.from({ length: Math.ceil(totalDuration) }).map((_, i) => (
-                 <div key={i} className="flex-1 border-l border-zinc-800 pl-1">{i}s</div>
+                 <div key={i} className="flex-1 border-l border-zinc-800 pl-1 cursor-pointer hover:bg-zinc-800" onClick={() => setCurrentTime(i)}>{i}s</div>
               ))}
            </div>
 
@@ -333,7 +388,10 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
                       width: `${widthPct}%`, 
                       marginLeft: `${leftPct}%` 
                     }}
-                    onClick={() => setSelectedClipId(clip.id)}
+                    onClick={() => {
+                        setSelectedClipId(clip.id);
+                        setCurrentTime(clip.startOffset); // Auto-seek start on select
+                    }}
                  >
                     {clip.type === 'VIDEO' && <Film size={16} className="text-blue-400 mr-2" />}
                     {clip.type === 'AUDIO' && <Music size={16} className="text-green-400 mr-2" />}
@@ -355,10 +413,10 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
 
            {/* Playhead */}
            <div 
-              className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
+              className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none transition-all duration-75"
               style={{ left: `${(currentTime / totalDuration) * 100}%` }}
            >
-              <div className="w-3 h-3 bg-red-500 rounded-full -ml-1.5 -mt-1.5" />
+              <div className="w-3 h-3 bg-red-500 rounded-full -ml-1.5 -mt-1.5 shadow-lg" />
            </div>
         </div>
       </div>
@@ -370,14 +428,22 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
               const clip = clips.find(c => c.id === selectedClipId)!;
               return (
                  <>
-                    <div className="col-span-4 text-xs font-bold text-zinc-500 uppercase mb-2">Propriedades: {clip.name}</div>
+                    <div className="col-span-4 flex items-center justify-between">
+                        <div className="text-xs font-bold text-zinc-500 uppercase">Propriedades: <span className="text-white">{clip.name}</span></div>
+                        <button onClick={previewSelectedClip} className="text-xs flex items-center gap-2 bg-zinc-800 hover:bg-amber-900 hover:text-amber-500 px-3 py-1 rounded transition-colors text-zinc-300">
+                           <Eye size={14} /> Visualizar Só Este Clipe
+                        </button>
+                    </div>
                     
                     <div className="space-y-1">
                        <label className="text-[10px] text-zinc-400">Início (Timeline)</label>
                        <input 
                          type="range" min={0} max={totalDuration} step={0.1} 
                          value={clip.startOffset}
-                         onChange={(e) => updateClip(clip.id, { startOffset: parseFloat(e.target.value) })}
+                         onChange={(e) => {
+                             updateClip(clip.id, { startOffset: parseFloat(e.target.value) });
+                             setCurrentTime(parseFloat(e.target.value)); // Visual feedback
+                         }}
                          className="w-full accent-amber-500"
                        />
                        <span className="text-xs text-white">{clip.startOffset.toFixed(1)}s</span>
@@ -398,7 +464,12 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ initialClips = [], library = 
                        <input 
                          type="range" min={0} max={10} step={0.1}
                          value={clip.trimStart}
-                         onChange={(e) => updateClip(clip.id, { trimStart: parseFloat(e.target.value) })}
+                         onChange={(e) => {
+                             const val = parseFloat(e.target.value);
+                             updateClip(clip.id, { trimStart: val });
+                             // CRITICAL: Update currentTime to show the specific trimmed frame immediately
+                             setCurrentTime(clip.startOffset); 
+                         }}
                          className="w-full accent-amber-500"
                        />
                        <span className="text-xs text-white">+{clip.trimStart.toFixed(1)}s</span>
