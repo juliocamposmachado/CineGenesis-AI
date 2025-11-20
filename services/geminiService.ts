@@ -66,21 +66,29 @@ export const analyzeArchetypes = async (images: UploadedImage[], apiKey?: string
   }
 };
 
+// Helper function for polling video operations
+const pollOperation = async (ai: GoogleGenAI, initialOp: any) => {
+  let op = initialOp;
+  while (!op.done) {
+    await new Promise(resolve => setTimeout(resolve, 6000));
+    op = await ai.operations.getVideosOperation({ operation: op });
+    console.log("Polling status...", op.metadata);
+  }
+  return op;
+};
+
 /**
  * Step 2: Generate the video using Veo
- * Includes a FALLBACK mechanism: If Veo rejects the image due to celebrity likeness,
- * it retries using ONLY the text description to create a lookalike.
  */
 export const generateCinematicVideo = async (
   images: UploadedImage[], 
   userPrompt: string, 
   archetypeDescription: string,
   apiKey?: string
-): Promise<string> => {
+): Promise<{ videoUrl: string, videoAsset: any }> => {
   const effectiveKey = apiKey || process.env.API_KEY;
   const ai = new GoogleGenAI({ apiKey: effectiveKey });
 
-  // Construct a rich prompt
   const fullPrompt = `
     Gere um vídeo cinematográfico fotorrealista (4k, texturas de pele reais).
     
@@ -93,7 +101,6 @@ export const generateCinematicVideo = async (
     ESTILO: Série de Drama/Suspense Psicológico. Iluminação de cinema, profundidade de campo.
   `.trim();
 
-  // Prepare reference images for Veo
   const referenceImagesPayload: VideoGenerationReferenceImage[] = images.map(img => ({
     image: {
       imageBytes: img.base64,
@@ -102,21 +109,9 @@ export const generateCinematicVideo = async (
     referenceType: VideoGenerationReferenceType.ASSET, 
   }));
 
-  // Helper function for polling
-  const pollOperation = async (initialOp: any) => {
-    let op = initialOp;
-    while (!op.done) {
-      await new Promise(resolve => setTimeout(resolve, 6000));
-      op = await ai.operations.getVideosOperation({ operation: op });
-      console.log("Polling status...", op.metadata);
-    }
-    return op;
-  };
-
   try {
     console.log("Tentativa 1: Usando Imagens de Referência...");
     
-    // ATTEMPT 1: WITH IMAGES
     let initialOp = await ai.models.generateVideos({
       model: 'veo-3.1-generate-preview',
       prompt: fullPrompt,
@@ -128,9 +123,9 @@ export const generateCinematicVideo = async (
       }
     });
 
-    let operationResult = await pollOperation(initialOp);
+    let operationResult = await pollOperation(ai, initialOp);
 
-    // CHECK FOR SAFETY FILTERS (CELEBRITY DETECTION)
+    // CHECK FOR SAFETY FILTERS
     // @ts-ignore
     const safetyReasons = operationResult.response?.raiMediaFilteredReasons;
     const isFiltered = safetyReasons && safetyReasons.length > 0;
@@ -138,8 +133,6 @@ export const generateCinematicVideo = async (
     if (isFiltered) {
       console.warn("Bloqueio de Imagem detectado (Provável Celebridade). Iniciando Fallback via Texto...");
       
-      // ATTEMPT 2: TEXT ONLY FALLBACK (Creates a lookalike)
-      // We refine the prompt to be even more descriptive since we lost the image reference
       const fallbackPrompt = `
         Crie um vídeo cinematográfico realista.
         
@@ -152,49 +145,106 @@ export const generateCinematicVideo = async (
       `.trim();
 
       initialOp = await ai.models.generateVideos({
-        model: 'veo-3.1-generate-preview', // Same model, just no images
+        model: 'veo-3.1-generate-preview',
         prompt: fallbackPrompt,
         config: {
           numberOfVideos: 1,
-          // NO REFERENCE IMAGES passed here
           resolution: '720p',
           aspectRatio: '16:9'
         }
       });
 
-      operationResult = await pollOperation(initialOp);
+      operationResult = await pollOperation(ai, initialOp);
       
-      // Check safety again on the second attempt
       // @ts-ignore
       if (operationResult.response?.raiMediaFilteredReasons?.length > 0) {
-         throw new Error("O roteiro contém temas sensíveis que violam as diretrizes de segurança, mesmo sem as imagens.");
+         throw new Error("O roteiro contém temas sensíveis que violam as diretrizes de segurança.");
       }
     }
 
-    // Process final result (from either attempt)
     if (operationResult.error) {
       throw new Error(`Erro na operação: ${operationResult.error.message}`);
     }
 
-    if (!operationResult.response?.generatedVideos || operationResult.response.generatedVideos.length === 0) {
-         throw new Error("O vídeo não foi gerado. Motivo desconhecido (possível filtro silencioso).");
-    }
-
-    const videoUri = operationResult.response.generatedVideos[0]?.video?.uri;
+    const generatedVideo = operationResult.response?.generatedVideos?.[0];
+    const videoUri = generatedVideo?.video?.uri;
+    
     if (!videoUri) {
         throw new Error("URI do vídeo vazia na resposta da API.");
     }
 
-    // Download
     const fetchUrl = `${videoUri}&key=${effectiveKey}`;
     const response = await fetch(fetchUrl);
     if (!response.ok) throw new Error("Falha ao baixar o arquivo de vídeo.");
     
     const blob = await response.blob();
-    return URL.createObjectURL(blob);
+    return {
+      videoUrl: URL.createObjectURL(blob),
+      videoAsset: generatedVideo?.video // Return the asset for future extensions
+    };
 
   } catch (error: any) {
     console.error("Video generation error:", error);
     throw new Error(error.message || "Erro ao gerar vídeo.");
+  }
+};
+
+/**
+ * Step 3: Extend the video
+ * Uses the previous video asset to ensure 100% consistency of characters.
+ */
+export const extendCinematicVideo = async (
+  previousVideoAsset: any,
+  newPrompt: string,
+  apiKey?: string
+): Promise<{ videoUrl: string, videoAsset: any }> => {
+  const effectiveKey = apiKey || process.env.API_KEY;
+  const ai = new GoogleGenAI({ apiKey: effectiveKey });
+
+  if (!previousVideoAsset) {
+    throw new Error("Nenhum vídeo anterior encontrado para estender.");
+  }
+
+  try {
+    console.log("Iniciando extensão de vídeo...");
+    
+    // Veo extension request
+    let initialOp = await ai.models.generateVideos({
+      model: 'veo-3.1-generate-preview',
+      prompt: newPrompt + " (Mantenha a consistência visual exata e continuidade da ação)",
+      video: previousVideoAsset, // Passing the raw asset guarantees continuity
+      config: {
+        numberOfVideos: 1,
+        resolution: '720p',
+        aspectRatio: '16:9' // Must match previous
+      }
+    });
+
+    const operationResult = await pollOperation(ai, initialOp);
+
+    if (operationResult.error) {
+      throw new Error(`Erro na extensão: ${operationResult.error.message}`);
+    }
+
+    const generatedVideo = operationResult.response?.generatedVideos?.[0];
+    const videoUri = generatedVideo?.video?.uri;
+
+    if (!videoUri) {
+      throw new Error("Falha ao gerar a continuação do vídeo.");
+    }
+
+    const fetchUrl = `${videoUri}&key=${effectiveKey}`;
+    const response = await fetch(fetchUrl);
+    if (!response.ok) throw new Error("Falha ao baixar o vídeo estendido.");
+
+    const blob = await response.blob();
+    return {
+      videoUrl: URL.createObjectURL(blob),
+      videoAsset: generatedVideo?.video
+    };
+
+  } catch (error: any) {
+    console.error("Video extension error:", error);
+    throw new Error(error.message || "Erro ao estender vídeo.");
   }
 };

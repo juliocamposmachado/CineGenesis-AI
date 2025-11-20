@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink } from 'lucide-react';
+import { Clapperboard, Sparkles, Loader2, AlertCircle, Play, Key, Eye, EyeOff, Linkedin, Github, Twitter, Facebook, Globe, Phone, BookOpen, ExternalLink, PlusCircle, Film } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import SafetyModal from './components/SafetyModal';
 import { UploadedImage, AppStatus } from './types';
-import { checkApiKey, analyzeArchetypes, generateCinematicVideo } from './services/geminiService';
+import { checkApiKey, analyzeArchetypes, generateCinematicVideo, extendCinematicVideo } from './services/geminiService';
 
 const App: React.FC = () => {
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
@@ -11,8 +11,10 @@ const App: React.FC = () => {
   const [images, setImages] = useState<{ A: UploadedImage | null; B: UploadedImage | null }>({ A: null, B: null });
   const [prompt, setPrompt] = useState('');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [lastVideoAsset, setLastVideoAsset] = useState<any>(null); // Store for extension
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [progressMsg, setProgressMsg] = useState('');
+  const [isExtensionMode, setIsExtensionMode] = useState(false);
   
   // API Key State
   const [userApiKey, setUserApiKey] = useState('');
@@ -62,12 +64,11 @@ const App: React.FC = () => {
   };
 
   const handleGenerate = async () => {
-    if (!images.A || !images.B || !prompt.trim()) return;
+    if (!prompt.trim()) return;
+    if (!isExtensionMode && (!images.A || !images.B)) return; // Normal mode needs images
 
-    setStatus(AppStatus.ANALYZING);
     setErrorMsg(null);
-    setVideoUrl(null);
-
+    
     try {
       const activeKey = userApiKey || process.env.API_KEY;
       
@@ -78,26 +79,53 @@ const App: React.FC = () => {
          }
       }
 
-      // 1. Analyze Archetypes
-      setProgressMsg("Extraindo identidade visual para o Projeto Piloto...");
-      const uploadedImages = [images.A, images.B];
-      const archetypes = await analyzeArchetypes(uploadedImages, userApiKey);
-      console.log("Archetypes detected:", archetypes);
+      if (isExtensionMode && lastVideoAsset) {
+        // --- EXTENSION FLOW ---
+        setStatus(AppStatus.EXTENDING);
+        setProgressMsg("Capturando frame final e gerando continuação (Consistência 100%)...");
+        
+        const result = await extendCinematicVideo(lastVideoAsset, prompt, userApiKey);
+        
+        setVideoUrl(result.videoUrl);
+        setLastVideoAsset(result.videoAsset); // Update asset for next extension
+        setStatus(AppStatus.COMPLETED);
+        setIsExtensionMode(false); // Reset mode but keep video
+        setPrompt(""); // Clear prompt for next action
 
-      // 2. Generate Video
-      setStatus(AppStatus.GENERATING);
-      setProgressMsg("Rodando motor Veo AI (Adaptando para personagens originais)...");
-      
-      const url = await generateCinematicVideo(uploadedImages, prompt, archetypes, userApiKey);
-      
-      setVideoUrl(url);
-      setStatus(AppStatus.COMPLETED);
+      } else {
+        // --- NEW GENERATION FLOW ---
+        if (!images.A || !images.B) return;
+
+        setStatus(AppStatus.ANALYZING);
+        setProgressMsg("Extraindo identidade visual para o Projeto Piloto...");
+        const uploadedImages = [images.A, images.B];
+        const archetypes = await analyzeArchetypes(uploadedImages, userApiKey);
+        
+        setStatus(AppStatus.GENERATING);
+        setProgressMsg("Rodando motor Veo AI (Adaptando para personagens originais)...");
+        
+        const result = await generateCinematicVideo(uploadedImages, prompt, archetypes, userApiKey);
+        
+        setVideoUrl(result.videoUrl);
+        setLastVideoAsset(result.videoAsset);
+        setStatus(AppStatus.COMPLETED);
+      }
 
     } catch (err: any) {
       console.error(err);
       setStatus(AppStatus.ERROR);
       setErrorMsg(err.message || "Ocorreu um erro desconhecido durante a geração.");
     }
+  };
+
+  const handleEnterExtensionMode = () => {
+    setIsExtensionMode(true);
+    setPrompt("");
+    // Focus logic could go here
+  };
+
+  const handleCancelExtension = () => {
+    setIsExtensionMode(false);
   };
 
   // Social Links Component
@@ -150,6 +178,8 @@ const App: React.FC = () => {
       </div>
     );
   }
+
+  const isProcessing = status === AppStatus.ANALYZING || status === AppStatus.GENERATING || status === AppStatus.EXTENDING;
 
   return (
     <div className="min-h-screen bg-black text-zinc-200 selection:bg-amber-500/30 flex flex-col">
@@ -221,8 +251,8 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* Image Slots */}
-            <section>
+            {/* Image Slots - Only show if NOT extending, or show as disabled */}
+            <section className={isExtensionMode ? "opacity-50 pointer-events-none grayscale transition-all" : "transition-all"}>
               <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
                 <span className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-400">1</span>
                 Elenco do Piloto (Referências)
@@ -241,43 +271,77 @@ const App: React.FC = () => {
                   onRemove={() => setImages(prev => ({ ...prev, B: null }))}
                 />
               </div>
-              <p className="text-xs text-zinc-500 mt-3 leading-relaxed border-l-2 border-amber-500 pl-3">
-                <strong className="text-zinc-300">Sistema Anti-Copyright:</strong> Se a IA detectar atores famosos, ela criará automaticamente "sósias" fictícios baseados no estilo, sem usar a imagem real.
-              </p>
+              {!isExtensionMode && (
+                <p className="text-xs text-zinc-500 mt-3 leading-relaxed border-l-2 border-amber-500 pl-3">
+                  <strong className="text-zinc-300">Sistema Anti-Copyright:</strong> Se a IA detectar atores famosos, ela criará automaticamente "sósias" fictícios baseados no estilo.
+                </p>
+              )}
             </section>
 
             {/* Prompt Input */}
             <section>
-              <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                <span className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-400">2</span>
-                Roteiro da Cena
+              <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2 justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-400">
+                    {isExtensionMode ? '+' : '2'}
+                  </span>
+                  {isExtensionMode ? 'Continuação da Cena' : 'Roteiro da Cena'}
+                </div>
+                {isExtensionMode && (
+                  <button onClick={handleCancelExtension} className="text-xs text-red-500 hover:underline">
+                    Cancelar Extensão
+                  </button>
+                )}
               </h2>
+              
+              {isExtensionMode && (
+                <div className="mb-3 p-3 bg-amber-900/20 border border-amber-800/50 rounded-lg flex items-center gap-2 text-xs text-amber-200 animate-in fade-in">
+                   <Film size={14} />
+                   <span><strong>Modo Continuidade:</strong> O sistema usará o último frame para manter os personagens idênticos.</span>
+                </div>
+              )}
+
               <div className="relative">
                 <textarea
-                  className="w-full h-40 bg-zinc-900/50 border border-zinc-700 rounded-xl p-4 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all resize-none"
-                  placeholder="Descreva a ação para o piloto de Juliette Psicose. Ex: O homem de barba grisalha encara a mulher de cabelos escuros em um quarto de hospital..."
+                  className={`w-full h-40 bg-zinc-900/50 border rounded-xl p-4 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-2 transition-all resize-none
+                    ${isExtensionMode 
+                      ? 'border-amber-600/50 focus:ring-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.1)]' 
+                      : 'border-zinc-700 focus:ring-amber-500/50'
+                    }
+                  `}
+                  placeholder={isExtensionMode 
+                    ? "O que acontece IMEDIATAMENTE depois? Ex: Ele se levanta bruscamente e vai até a janela..." 
+                    : "Descreva a ação para o piloto de Juliette Psicose. Ex: O homem de barba grisalha encara a mulher..."
+                  }
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                 />
-                <Sparkles className="absolute bottom-4 right-4 text-zinc-700" size={16} />
+                <Sparkles className={`absolute bottom-4 right-4 ${isExtensionMode ? "text-amber-500" : "text-zinc-700"}`} size={16} />
               </div>
             </section>
 
             {/* Action Button */}
             <button
               onClick={handleGenerate}
-              disabled={!images.A || !images.B || !prompt || status === AppStatus.ANALYZING || status === AppStatus.GENERATING}
+              disabled={(!isExtensionMode && (!images.A || !images.B)) || !prompt || isProcessing}
               className={`w-full py-4 rounded-xl font-bold uppercase tracking-wide text-sm transition-all flex items-center justify-center gap-3 shadow-xl
-                ${(!images.A || !images.B || !prompt) 
+                ${(!prompt || (!isExtensionMode && (!images.A || !images.B)) || isProcessing) 
                   ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-amber-700 to-red-800 hover:from-amber-600 hover:to-red-700 text-white hover:shadow-red-900/30 hover:scale-[1.02]'
+                  : isExtensionMode
+                    ? 'bg-gradient-to-r from-amber-600 to-amber-800 hover:from-amber-500 hover:to-amber-700 text-white shadow-amber-900/20 hover:scale-[1.02]'
+                    : 'bg-gradient-to-r from-red-900 to-zinc-900 hover:from-red-800 hover:to-zinc-800 text-white hover:shadow-red-900/30 hover:scale-[1.02]'
                 }
               `}
             >
-              {(status === AppStatus.ANALYZING || status === AppStatus.GENERATING) ? (
+              {isProcessing ? (
                 <>
                   <Loader2 className="animate-spin" size={20} />
-                  Produzindo...
+                  {status === AppStatus.EXTENDING ? 'Estendendo...' : 'Produzindo...'}
+                </>
+              ) : isExtensionMode ? (
+                <>
+                   <PlusCircle fill="currentColor" className="text-black" size={16} />
+                   Gerar Continuação (+5s)
                 </>
               ) : (
                 <>
@@ -300,17 +364,17 @@ const App: React.FC = () => {
             <div className="h-full min-h-[500px] bg-zinc-900/30 rounded-2xl border border-zinc-800 flex flex-col overflow-hidden relative">
               
               {/* Top Bar */}
-              <div className="h-12 border-b border-zinc-800 flex items-center px-4 bg-zinc-900/50">
+              <div className="h-12 border-b border-zinc-800 flex items-center px-4 bg-zinc-900/50 justify-between">
                 <div className="flex gap-2">
-                  <div className="w-3 h-3 rounded-full bg-red-900/50"></div>
+                  <div className={`w-3 h-3 rounded-full ${isExtensionMode ? 'bg-amber-500 animate-pulse' : 'bg-red-900/50'}`}></div>
                   <div className="w-3 h-3 rounded-full bg-red-900/50"></div>
                   <div className="w-3 h-3 rounded-full bg-red-900/50"></div>
                 </div>
-                <div className="ml-auto text-xs text-zinc-500 font-mono">JULIETTE PSICOSE / PILOT_V1</div>
+                <div className="text-xs text-zinc-500 font-mono">JULIETTE PSICOSE / {isExtensionMode ? 'EXTENDING_SCENE' : 'PILOT_V1'}</div>
               </div>
 
               {/* Content Area */}
-              <div className="flex-1 flex items-center justify-center p-8">
+              <div className="flex-1 flex items-center justify-center p-8 relative">
                 
                 {status === AppStatus.IDLE && (
                   <div className="text-center space-y-4 opacity-50">
@@ -321,8 +385,8 @@ const App: React.FC = () => {
                   </div>
                 )}
 
-                {(status === AppStatus.ANALYZING || status === AppStatus.GENERATING) && (
-                  <div className="text-center space-y-6 max-w-md animate-pulse">
+                {isProcessing && (
+                  <div className="text-center space-y-6 max-w-md animate-pulse z-10 relative">
                     <div className="relative w-24 h-24 mx-auto">
                       <div className="absolute inset-0 border-4 border-red-900/30 rounded-full"></div>
                       <div className="absolute inset-0 border-t-4 border-amber-600 rounded-full animate-spin"></div>
@@ -330,12 +394,18 @@ const App: React.FC = () => {
                     <div>
                       <h3 className="text-xl font-cinema text-white mb-2">Em Produção</h3>
                       <p className="text-amber-500/80 text-sm font-mono">{progressMsg}</p>
-                      <p className="text-zinc-500 text-xs mt-4">Caso a imagem contenha celebridades, o sistema gerará um "lookalike" (sósia fictício) automaticamente.</p>
                     </div>
                   </div>
                 )}
+                
+                {/* Blur background effect during processing if video exists */}
+                {isProcessing && videoUrl && (
+                   <div className="absolute inset-0 opacity-20 blur-lg pointer-events-none">
+                      <video src={videoUrl} className="w-full h-full object-cover" />
+                   </div>
+                )}
 
-                {status === AppStatus.COMPLETED && videoUrl && (
+                {status === AppStatus.COMPLETED && videoUrl && !isProcessing && (
                   <div className="w-full h-full flex flex-col animate-in fade-in zoom-in duration-500">
                     <video 
                       controls 
@@ -344,20 +414,31 @@ const App: React.FC = () => {
                       className="w-full h-auto rounded-lg shadow-2xl ring-1 ring-white/10"
                       src={videoUrl}
                     />
-                    <div className="mt-6 p-4 bg-zinc-900/80 rounded-lg border border-zinc-700/50 backdrop-blur flex items-start justify-between">
+                    <div className="mt-6 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-zinc-900/80 p-4 rounded-lg border border-zinc-700/50 backdrop-blur">
                       <div>
-                        <h4 className="text-amber-500 text-xs font-bold uppercase mb-1">Cena Gerada com Sucesso</h4>
-                        <p className="text-zinc-400 text-xs italic max-w-lg">Personagens adaptados para ficção baseados nos arquétipos de Juliette Psicose.</p>
+                        <h4 className="text-amber-500 text-xs font-bold uppercase mb-1">Cena Gerada</h4>
+                        <p className="text-zinc-400 text-xs italic">Pronto para download ou extensão.</p>
                       </div>
-                       <a 
-                      href={videoUrl} 
-                      download="juliette_psicose_pilot.mp4"
-                      className="inline-flex items-center justify-center px-4 py-2 bg-amber-700 hover:bg-amber-600 text-white text-xs rounded transition-colors font-bold uppercase tracking-wider"
-                    >
-                      Download MP4
-                    </a>
+                      
+                      <div className="flex gap-3 w-full md:w-auto">
+                        {!isExtensionMode && (
+                          <button 
+                            onClick={handleEnterExtensionMode}
+                            className="flex-1 md:flex-none px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded transition-colors font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-zinc-600"
+                          >
+                            <PlusCircle size={14} /> Estender Cena
+                          </button>
+                        )}
+                        
+                        <a 
+                          href={videoUrl} 
+                          download="juliette_psicose_scene.mp4"
+                          className="flex-1 md:flex-none px-4 py-2 bg-amber-700 hover:bg-amber-600 text-white text-xs rounded transition-colors font-bold uppercase tracking-wider flex items-center justify-center"
+                        >
+                          Download MP4
+                        </a>
+                      </div>
                     </div>
-                   
                   </div>
                 )}
               </div>
